@@ -13,7 +13,6 @@ roami/
 ├── CONTRIBUTING.md
 ├── LICENSE
 └── .env.example
-```
 
 mobile/ --> the React Native iOS app, contains everything users see and interact with 
 backend/ --> the server that stores data and handles search, recommendations, trips, and social features
@@ -24,6 +23,7 @@ README.md --> What Roami is, why it's useful, and how to get started using or wo
 CONTRIBUTING.md --> Instructions for setup, branching, and how to submit changes
 LICENSE --> legal terms under which the code can be used
 .env.example --> environment variables the project needs
+```
 
 # Living Document 
 https://docs.google.com/document/d/1Av9LvAKo3iDqZnaS_e2IFZpP3BJK_aKHNyqXX9LYanc/edit?usp=sharing
