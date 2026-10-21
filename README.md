@@ -4,32 +4,37 @@ Roami is an iOS mobile social travel discovery and planning app designed to feel
 # Repository Layout
 ```
 roami/
-├── apps/
-│   └── mobile/                 # Expo + React Native + TS
-│       └── src/
-│           ├── screens/        # Feed, Search, Map, Trip, Profile
-│           ├── components/
-│           ├── features/       # accounts, discovery, social, saved, itinerary, visits, safety
-│           ├── lib/firebase.ts
-│           └── api/            # typed wrappers around callable functions
-├── functions/                  # Firebase Cloud Functions (backend)
+├── mobile/                          # Expo + React Native + TS
 │   └── src/
-│       ├── handlers/           # request handlers: auth check, validate input, call service
-│       ├── services/           # search, recommendations, planner, moderation
-│       ├── planner/
-│       │   ├── generator.ts    # bounded heuristic, max 2 alternatives
-│       │   └── validator.ts    # separate: time windows, hours, walking limits, durations
-│       ├── repositories/       # all Firestore reads/writes live here
-│       └── adapters/           # place data (OSM) + routing, behind interfaces
-├── packages/
-│   └── shared/                 # TS models, enums, zod schemas, constants
-├── scripts/
-│   └── import-places/          # Overpass -> Places import for pilot city
-├── docs/                       # architecture, spike findings
+│       ├── auth/                    # AuthService.ts, AuthProvider.tsx, AuthScreens.tsx
+│       ├── screens/                 # ProfileScreen, DiscoveryScreen, SavedPlacesScreen,
+│       │                            # ItineraryScreen, VisitRankingScreen
+│       ├── components/              # RecommendationCard, RecommendationEditor,
+│       │                            # PlaceMap, TripOverview
+│       └── api/ApiClient.ts         # the only way screens reach the backend
+├── backend/                         # Cloud Functions (functions source dir)
+│   └── src/
+│       ├── handlers/                # validate input (zod) + call Authorization
+│       ├── authorization.ts
+│       ├── services/                # search/ (SearchMatcher, DiscoveryService), social/,
+│       │                            # saves/, trips/, revision/, preparation/,
+│       │                            # visits/, safety/ (BlockService, ModerationService)
+│       ├── planner/                 # ItineraryPlanner.ts, ScheduleValidator.ts (pure)
+│       ├── repositories/            # User, Content, Travel, Moderation
+│       ├── adapters/                # PlaceDataAdapter.ts, RoutingAdapter.ts
+│       └── scripts/                 # admin moderation script, pilot place import
+├── shared/
+│   └── src/models.ts                # types for every Firestore collection + zod schemas
+├── tests/                           # rules tests, planner fixtures, end-to-end
+├── docs/                            # architecture, spike-places-routing.md
+├── .github/workflows/ci.yml
 ├── firestore.rules
 ├── firestore.indexes.json
-├── firebase.json
-└── package.json                # npm workspaces
+├── firebase.json                    # "functions": { "source": "backend" }
+├── eslint.config.js (or .eslintrc.cjs)
+├── .prettierrc
+├── tsconfig.base.json
+└── package.json                     # "workspaces": ["mobile", "backend", "shared"]
 
 mobile/ --> the React Native iOS app, contains everything users see and interact with 
 backend/ --> the server that stores data and handles search, recommendations, trips, and social features
