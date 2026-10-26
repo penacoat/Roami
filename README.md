@@ -1,7 +1,7 @@
 # Roami
 Roami is an iOS mobile social travel discovery and planning app designed to feel like a knowledgeable local who understands your interests. Users can search for something specific, explore recommendations on a map, or find inspiration in a feed of friends' trips and linked social posts. Recommendations show who suggested a place and what they liked about it. Roami connects finding somewhere worth going with figuring out how to go.
 
-# Repository Layout
+## Repository Layout
 ```
 roami/
 ├── mobile/                          # Expo + React Native + TS
@@ -47,7 +47,7 @@ LICENSE --> legal terms under which the code can be used
 .env.example --> environment variables the project needs
 ```
 
-# Living Document 
+## Living Document 
 https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing
 * must be signed into a UW email to access
 
