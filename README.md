@@ -50,3 +50,10 @@ LICENSE --> legal terms under which the code can be used
 # Living Document 
 https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing
 * must be signed into a UW email to access
+
+
+
+## Documentation
+
+- [Setup instructions](docs/setup.md)
+- [Team workflow](docs/team-workflow.md)
