@@ -51,6 +51,14 @@ LICENSE --> legal terms under which the code can be used
 https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing
 * must be signed into a UW email to access
 
+## Branch naming
+
+Format: `<github-username>/<short-description>`
+
+Examples:
+- `penacoat/auth`
+- `penacoat/shared-models`
+- `jsmith/fix-search-typo`
 
 
 ## Documentation
