@@ -1,7 +1,111 @@
 rules_version = '2';
 
+// Roami security rules. All writes go through backend functions (Admin SDK),
+// so the app itself is never allowed to write. Reads are limited by ownership.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function tripOwnerId(tripId) {
+      return get(/databases/$(database)/documents/trips/$(tripId)).data.ownerId;
+    }
+
+    function sharedWithMe(tripId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/tripShares/$(tripId))
+        && request.auth.uid in get(/databases/$(database)/documents/tripShares/$(tripId)).data.viewerIds;
+    }
+
+    function canViewTrip(tripId) {
+      return isUser(tripOwnerId(tripId)) || sharedWithMe(tripId);
+    }
+
+    function taskTripId(stopId) {
+      return get(/databases/$(database)/documents/tripStops/$(stopId)).data.tripId;
+    }
+
+    // Profiles and the place catalog: any signed-in user can read.
+    match /users/{userId} {
+      allow read: if signedIn();
+    }
+
+    match /places/{placeId} {
+      allow read: if signedIn();
+    }
+
+    // Public content: removed or hidden items are visible only to their author.
+    match /recommendations/{id} {
+      allow read: if signedIn()
+        && (resource.data.moderationStatus == 'active' || isUser(resource.data.authorId));
+    }
+
+    match /comments/{id} {
+      allow read: if signedIn()
+        && (resource.data.moderationStatus == 'active' || isUser(resource.data.authorId));
+    }
+
+    match /collections/{id} {
+      allow read: if signedIn()
+        && (resource.data.isPublished == true || isUser(resource.data.ownerId));
+    }
+
+    // Private per-user data.
+    match /savedPlaces/{id} {
+      allow read: if isUser(resource.data.userId);
+    }
+
+    match /visits/{id} {
+      allow read: if isUser(resource.data.userId);
+    }
+
+    match /rankings/{id} {
+      allow read: if isUser(resource.data.userId);
+    }
+
+    match /likes/{id} {
+      allow read: if isUser(resource.data.userId);
+    }
+
+    match /blocks/{id} {
+      allow read: if isUser(resource.data.userId);
+    }
+
+    match /follows/{id} {
+      allow read: if isUser(resource.data.followerId) || isUser(resource.data.followeeId);
+    }
+
+    // Trips: the owner and people the trip is shared with can read (view-only).
+    match /trips/{tripId} {
+      allow read: if isUser(resource.data.ownerId) || sharedWithMe(tripId);
+    }
+
+    match /tripStops/{stopId} {
+      allow read: if canViewTrip(resource.data.tripId);
+    }
+
+    match /tripShares/{tripId} {
+      allow read: if signedIn()
+        && (request.auth.uid in resource.data.viewerIds || isUser(tripOwnerId(tripId)));
+    }
+
+    // Preparation tasks (booking links, deadlines) are owner-only, even on shared trips.
+    match /preparationTasks/{taskId} {
+      allow read: if isUser(tripOwnerId(taskTripId(resource.data.tripStopId)));
+    }
+
+    // Reports are reviewed by administrators through backend scripts only.
+    match /reports/{id} {
+      allow read: if false;
+    }
+
+    // Everything else, and every write, is denied.
     match /{document=**} {
       allow read, write: if false;
     }
