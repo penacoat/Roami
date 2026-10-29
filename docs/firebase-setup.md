@@ -164,3 +164,8 @@ to be exported from `backend/src/index.ts` to be served.
 
 `.env` files, service account keys, `backend/lib/`, `node_modules/`, or any `*-debug.log`
 files. They're already in `.gitignore`; check `git status` before every commit.
+
+
+
+
+## Don’t run npm run deploy (or firebase deploy) yet. It would push functions to the real Firebase project, and that needs the paid Blaze plan. Decide as a team who deploys and when.
