@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import {deleteDoc, doc, getDoc, setDoc, updateDoc} from "firebase/firestore";
+import {deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch} from "firebase/firestore";
 
 let env: RulesTestEnvironment;
 
@@ -203,5 +203,144 @@ describe("reports", () => {
     await seed("reports/r1", report("bob"));
     await assertFails(getDoc(doc(as("bob"), "reports/r1")));
     await assertFails(updateDoc(doc(as("bob"), "reports/r1"), {status: "dismissed"}));
+  });
+});
+
+const trip = (uid: string, id: string, revision: number) => ({
+  id, ownerId: uid, city: "Seattle", startDate: "2026-11-01", endDate: "2026-11-03",
+  dailyWindow: {start: "09:00", end: "21:00"}, startingPoints: [] as unknown[],
+  candidatePlaceIds: [] as string[], revision, createdAt: now, updatedAt: now,
+});
+
+const stop = (id: string, tripId: string, placeId: string | null) => ({
+  id, tripId, placeId, title: placeId ? null : "Dinner reservation",
+  recommendationIds: [] as string[], day: 1, order: 1, startTime: null,
+  visitMinutes: 60, walkingMinutesFromPrevious: null, isFixed: false,
+  isRequired: false, warnings: [] as string[],
+});
+
+// Writes a stop and raises the trip's revision in one batch, like the app will.
+const writeStopWithRevision = (uid: string, data: ReturnType<typeof stop>, revision: number) => {
+  const db = as(uid);
+  const batch = writeBatch(db);
+  batch.update(doc(db, `trips/${data.tripId}`), {revision, updatedAt: now});
+  batch.set(doc(db, `tripStops/${data.id}`), data);
+  return batch.commit();
+};
+
+describe("trips: who can write and how", () => {
+  it("lets a user create their own trip at revision 1", async () => {
+    await assertSucceeds(setDoc(doc(as("alice"), "trips/t1"), trip("alice", "t1", 1)));
+  });
+  it("blocks creating a trip for someone else", async () => {
+    await assertFails(setDoc(doc(as("bob"), "trips/t1"), trip("alice", "t1", 1)));
+  });
+  it("blocks creating a trip that starts above revision 1", async () => {
+    await assertFails(setDoc(doc(as("alice"), "trips/t1"), trip("alice", "t1", 5)));
+  });
+  it("lets the owner save a change that raises the revision by one", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertSucceeds(updateDoc(doc(as("alice"), "trips/t1"), {revision: 2, city: "Portland"}));
+  });
+  it("blocks a save that does not raise the revision", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(updateDoc(doc(as("alice"), "trips/t1"), {city: "Portland"}));
+  });
+  it("blocks a save that skips a revision", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(updateDoc(doc(as("alice"), "trips/t1"), {revision: 3}));
+  });
+  it("blocks changing the owner of a trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(updateDoc(doc(as("alice"), "trips/t1"), {revision: 2, ownerId: "bob"}));
+  });
+  it("blocks a viewer from editing a shared trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertFails(updateDoc(doc(as("bob"), "trips/t1"), {revision: 2}));
+  });
+  it("blocks deleting a trip from the app", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(deleteDoc(doc(as("alice"), "trips/t1")));
+  });
+});
+
+describe("trip stops: tied to the trip revision", () => {
+  beforeEach(async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await seed("trips/t2", trip("alice", "t2", 1));
+    await seed("places/p5", {name: "Museum"});
+  });
+
+  it("lets the owner add a stop while raising the revision", async () => {
+    await assertSucceeds(writeStopWithRevision("alice", stop("s1", "t1", "p5"), 2));
+  });
+  it("lets the owner add a fixed commitment with no place", async () => {
+    await assertSucceeds(writeStopWithRevision("alice", stop("s1", "t1", null), 2));
+  });
+  it("blocks adding a stop without raising the revision", async () => {
+    await assertFails(setDoc(doc(as("alice"), "tripStops/s1"), stop("s1", "t1", "p5")));
+  });
+  it("blocks adding a stop that raises the revision by two", async () => {
+    await assertFails(writeStopWithRevision("alice", stop("s1", "t1", "p5"), 3));
+  });
+  it("blocks a viewer from adding a stop", async () => {
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertFails(writeStopWithRevision("bob", stop("s1", "t1", "p5"), 2));
+  });
+  it("blocks a stop for a place that is not in the catalog", async () => {
+    await assertFails(writeStopWithRevision("alice", stop("s1", "t1", "nope"), 2));
+  });
+  it("blocks a stop on day 9", async () => {
+    await assertFails(writeStopWithRevision("alice", {...stop("s1", "t1", "p5"), day: 9}, 2));
+  });
+  it("lets the owner move a stop while raising the revision", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    const db = as("alice");
+    const batch = writeBatch(db);
+    batch.update(doc(db, "trips/t1"), {revision: 2, updatedAt: now});
+    batch.update(doc(db, "tripStops/s1"), {day: 2, order: 3});
+    await assertSucceeds(batch.commit());
+  });
+  it("blocks moving a stop onto a different trip", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    const db = as("alice");
+    const batch = writeBatch(db);
+    batch.update(doc(db, "trips/t1"), {revision: 2, updatedAt: now});
+    batch.update(doc(db, "tripStops/s1"), {tripId: "t2"});
+    await assertFails(batch.commit());
+  });
+  it("lets the owner delete a stop while raising the revision", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    const db = as("alice");
+    const batch = writeBatch(db);
+    batch.update(doc(db, "trips/t1"), {revision: 2, updatedAt: now});
+    batch.delete(doc(db, "tripStops/s1"));
+    await assertSucceeds(batch.commit());
+  });
+  it("blocks deleting a stop without raising the revision", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    await assertFails(deleteDoc(doc(as("alice"), "tripStops/s1")));
+  });
+});
+
+describe("trip sharing", () => {
+  beforeEach(async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+  });
+
+  it("lets the owner choose who can view", async () => {
+    await assertSucceeds(setDoc(doc(as("alice"), "tripShares/t1"), {tripId: "t1", viewerIds: ["bob"]}));
+  });
+  it("blocks someone else from sharing the owner's trip", async () => {
+    await assertFails(setDoc(doc(as("bob"), "tripShares/t1"), {tripId: "t1", viewerIds: ["bob"]}));
+  });
+  it("lets a viewer read their share but not change it", async () => {
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertSucceeds(getDoc(doc(as("bob"), "tripShares/t1")));
+    await assertFails(setDoc(doc(as("bob"), "tripShares/t1"), {tripId: "t1", viewerIds: ["bob", "carol"]}));
+  });
+  it("lets the owner check a share that does not exist yet", async () => {
+    await assertSucceeds(getDoc(doc(as("alice"), "tripShares/t1")));
   });
 });
