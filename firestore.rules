@@ -1,7 +1,8 @@
 rules_version = '2';
 
-// Roami security rules. All writes go through backend functions (Admin SDK),
-// so the app itself is never allowed to write. Reads are limited by ownership.
+// Roami security rules. There are no Cloud Functions, so the app writes to
+// Firestore directly and these rules are the server-side enforcement.
+// Part 1: profiles, saved places, reports. Trips stay read-only until part 2.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -31,11 +32,56 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/tripStops/$(stopId)).data.tripId;
     }
 
-    // Profiles and the place catalog: any signed-in user can read.
-    match /users/{userId} {
-      allow read: if signedIn();
+    function shortString(v, limit) {
+      return v is string && v.size() > 0 && v.size() <= limit;
     }
 
+    function textUpTo(v, limit) {
+      return v is string && v.size() <= limit;
+    }
+
+    function validProfile(uid, d) {
+      return d.keys().hasOnly(['id', 'name', 'bio', 'interests', 'createdAt'])
+        && d.id == uid
+        && shortString(d.name, 60)
+        && textUpTo(d.bio, 500)
+        && d.interests is list && d.interests.size() <= 20
+        && d.createdAt is string;
+    }
+
+    function validSave(saveId, d) {
+      return d.keys().hasOnly(['id', 'userId', 'placeId', 'recommendationIds', 'personalNote', 'createdAt'])
+        && d.id == saveId
+        && saveId == d.userId + '_' + d.placeId
+        && shortString(d.placeId, 200)
+        && d.recommendationIds is list && d.recommendationIds.size() <= 25
+        && textUpTo(d.personalNote, 2000)
+        && d.createdAt is string;
+    }
+
+    function validReport(reportId, d) {
+      return d.keys().hasOnly(['id', 'reporterId', 'contentType', 'contentId', 'reason', 'status', 'reviewedBy', 'createdAt'])
+        && d.id == reportId
+        && d.reporterId == request.auth.uid
+        && d.contentType in ['recommendation', 'comment', 'user']
+        && shortString(d.contentId, 200)
+        && shortString(d.reason, 500)
+        && d.status == 'open'
+        && d.reviewedBy == null
+        && d.createdAt is string;
+    }
+
+    // Profiles: any signed-in user can read; you can create and edit only your own.
+    // Profile documents must never hold private data such as email.
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isUser(userId) && validProfile(userId, request.resource.data);
+      allow update: if isUser(userId)
+        && validProfile(userId, request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Place catalog: read-only from the app (imported by admin script).
     match /places/{placeId} {
       allow read: if signedIn();
     }
@@ -56,11 +102,23 @@ service cloud.firestore {
         && (resource.data.isPublished == true || isUser(resource.data.ownerId));
     }
 
-    // Private per-user data.
-    match /savedPlaces/{id} {
-      allow read: if isUser(resource.data.userId);
+    // Saved places: private. The document ID must be userId_placeId, which gives
+    // one entry per user and place. The place must exist in the catalog.
+    match /savedPlaces/{saveId} {
+      allow get: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isUser(request.resource.data.userId)
+        && validSave(saveId, request.resource.data)
+        && exists(/databases/$(database)/documents/places/$(request.resource.data.placeId));
+      allow update: if isUser(resource.data.userId)
+        && validSave(saveId, request.resource.data)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.placeId == resource.data.placeId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isUser(resource.data.userId);
     }
 
+    // Still read-only from the app.
     match /visits/{id} {
       allow read: if isUser(resource.data.userId);
     }
@@ -81,7 +139,7 @@ service cloud.firestore {
       allow read: if isUser(resource.data.followerId) || isUser(resource.data.followeeId);
     }
 
-    // Trips: the owner and people the trip is shared with can read (view-only).
+    // Trips: owner and people the trip is shared with can read. Writes come in part 2.
     match /trips/{tripId} {
       allow read: if isUser(resource.data.ownerId) || sharedWithMe(tripId);
     }
@@ -100,12 +158,14 @@ service cloud.firestore {
       allow read: if isUser(tripOwnerId(taskTripId(resource.data.tripStopId)));
     }
 
-    // Reports are reviewed by administrators through backend scripts only.
-    match /reports/{id} {
+    // Reports: any signed-in user can file one as themselves, always as 'open'.
+    // Nobody can read, change, or delete them from the app. Admins use a script.
+    match /reports/{reportId} {
       allow read: if false;
+      allow create: if signedIn() && validReport(reportId, request.resource.data);
     }
 
-    // Everything else, and every write, is denied.
+    // Everything else is denied.
     match /{document=**} {
       allow read, write: if false;
     }
