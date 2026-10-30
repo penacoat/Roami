@@ -7,7 +7,7 @@ import {
     type User,
   } from 'firebase/auth';
   
-  import { auth } from './firebase';
+  import { requireAuth } from './firebase';
   
   export interface AuthUser {
     uid: string;
@@ -38,6 +38,9 @@ import {
         return 'Network error. Check your connection and try again.';
       case 'auth/operation-not-allowed':
         return 'Email/password sign-in is not turned on in Firebase yet.';
+      case 'auth/invalid-api-key':
+      case 'auth/api-key-not-valid.-please-pass-a-valid-api-key.':
+        return 'The Firebase API key is invalid. Check EXPO_PUBLIC_FIREBASE_API_KEY in mobile/.env, then restart Expo.';
       default:
         return 'Something went wrong. Please try again.';
     }
@@ -49,7 +52,7 @@ import {
     displayName: string,
   ): Promise<AuthUser> {
     try {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await createUserWithEmailAndPassword(requireAuth(), email.trim(), password);
       await updateProfile(credential.user, { displayName: displayName.trim() });
       return toAuthUser(credential.user);
     } catch (error) {
@@ -59,7 +62,7 @@ import {
   
   export async function signIn(email: string, password: string): Promise<AuthUser> {
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(requireAuth(), email.trim(), password);
       return toAuthUser(credential.user);
     } catch (error) {
       throw new Error(friendlyMessage(error));
@@ -67,10 +70,10 @@ import {
   }
   
   export async function signOut(): Promise<void> {
-    await firebaseSignOut(auth);
+    await firebaseSignOut(requireAuth());
   }
   
   /** Calls the callback now and whenever the user signs in or out. Returns an unsubscribe function. */
   export function subscribeToAuthChanges(callback: (user: AuthUser | null) => void): () => void {
-    return onAuthStateChanged(auth, (user) => callback(user ? toAuthUser(user) : null));
+    return onAuthStateChanged(requireAuth(), (user) => callback(user ? toAuthUser(user) : null));
   }

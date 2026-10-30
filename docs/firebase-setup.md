@@ -23,6 +23,12 @@ If GitHub asks you to sign in, use [GitHub Desktop](https://desktop.github.com) 
 
 Create a file named `mobile/.env` (next to `package.json`) with the following. THE REAL VALUES ARE IN THE LIVING DOC. **Never commit this file.** It is already in `.gitignore`.
 
+You can also copy `mobile/.env.example` to `mobile/.env` as a starting point.
+Fill in the actual values before launching the app. Missing configuration shows a
+setup screen; an `auth/invalid-api-key` error means the configured API key needs
+to be checked against the team's Firebase web app configuration. After changing
+the file, stop Expo, run `npx expo start --clear` from `mobile/`, and reload the app.
+
 ```
 EXPO_PUBLIC_FIREBASE_API_KEY=
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
