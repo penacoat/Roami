@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import {doc, getDoc, setDoc} from "firebase/firestore";
+import {deleteDoc, doc, getDoc, setDoc, updateDoc} from "firebase/firestore";
 
 let env: RulesTestEnvironment;
 
@@ -102,11 +102,106 @@ describe("blocks and reports", () => {
   });
 });
 
-describe("the app cannot write directly", () => {
-  it("rejects a write from the owner", async () => {
-    await assertFails(setDoc(doc(as("alice"), "savedPlaces/alice_p2"), {userId: "alice"}));
+
+const now = "2026-10-30T12:00:00Z";
+
+const profile = (uid: string) => ({
+  id: uid, name: "Test User", bio: "", interests: ["jazz"], createdAt: now,
+});
+
+const save = (uid: string, placeId: string) => ({
+  id: `${uid}_${placeId}`, userId: uid, placeId,
+  recommendationIds: [] as string[], personalNote: "", createdAt: now,
+});
+
+const report = (uid: string) => ({
+  id: "r1", reporterId: uid, contentType: "recommendation", contentId: "recActive",
+  reason: "spam", status: "open", reviewedBy: null, createdAt: now,
+});
+
+const seed = (path: string, data: Record<string, unknown>) =>
+  env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), path), data);
   });
-  it("rejects a user creating a report", async () => {
-    await assertFails(setDoc(doc(as("bob"), "reports/new"), {reporterId: "bob"}));
+
+describe("profiles", () => {
+  it("lets a user create their own profile", async () => {
+    await assertSucceeds(setDoc(doc(as("alice"), "users/alice"), profile("alice")));
+  });
+  it("blocks creating someone else's profile", async () => {
+    await assertFails(setDoc(doc(as("bob"), "users/alice"), profile("alice")));
+  });
+  it("blocks extra fields such as email", async () => {
+    await assertFails(
+      setDoc(doc(as("alice"), "users/alice"), {...profile("alice"), email: "a@example.com"}),
+    );
+  });
+  it("lets the owner edit a profile but not createdAt", async () => {
+    await seed("users/alice", profile("alice"));
+    await assertSucceeds(updateDoc(doc(as("alice"), "users/alice"), {name: "New Name"}));
+    await assertFails(updateDoc(doc(as("alice"), "users/alice"), {createdAt: "2027-01-01T00:00:00Z"}));
+  });
+  it("lets any signed-in user read a profile", async () => {
+    await seed("users/alice", profile("alice"));
+    await assertSucceeds(getDoc(doc(as("bob"), "users/alice")));
+  });
+  it("blocks deleting a profile", async () => {
+    await seed("users/alice", profile("alice"));
+    await assertFails(deleteDoc(doc(as("alice"), "users/alice")));
+  });
+});
+
+describe("saved places", () => {
+  it("lets a user save an existing place", async () => {
+    await seed("places/p2", {name: "Cafe"});
+    await assertSucceeds(setDoc(doc(as("alice"), "savedPlaces/alice_p2"), save("alice", "p2")));
+  });
+  it("blocks saving a place that is not in the catalog", async () => {
+    await assertFails(setDoc(doc(as("alice"), "savedPlaces/alice_nope"), save("alice", "nope")));
+  });
+  it("blocks a document ID that is not userId_placeId", async () => {
+    await seed("places/p2", {name: "Cafe"});
+    await assertFails(setDoc(doc(as("alice"), "savedPlaces/alice_other"), save("alice", "p2")));
+  });
+  it("blocks saving on behalf of another user", async () => {
+    await seed("places/p2", {name: "Cafe"});
+    await assertFails(setDoc(doc(as("bob"), "savedPlaces/alice_p2"), save("alice", "p2")));
+  });
+  it("lets the owner edit a note but not change the place", async () => {
+    await seed("places/p3", {name: "Park"});
+    await seed("savedPlaces/alice_p3", save("alice", "p3"));
+    await assertSucceeds(updateDoc(doc(as("alice"), "savedPlaces/alice_p3"), {personalNote: "Go early"}));
+    await assertFails(updateDoc(doc(as("alice"), "savedPlaces/alice_p3"), {placeId: "p4"}));
+  });
+  it("blocks other users from editing or deleting a save", async () => {
+    await seed("places/p3", {name: "Park"});
+    await seed("savedPlaces/alice_p3", save("alice", "p3"));
+    await assertFails(updateDoc(doc(as("bob"), "savedPlaces/alice_p3"), {personalNote: "x"}));
+    await assertFails(deleteDoc(doc(as("bob"), "savedPlaces/alice_p3")));
+  });
+  it("lets the owner delete a save", async () => {
+    await seed("places/p3", {name: "Park"});
+    await seed("savedPlaces/alice_p3", save("alice", "p3"));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "savedPlaces/alice_p3")));
+  });
+  it("lets a user check whether their own save exists", async () => {
+    await assertSucceeds(getDoc(doc(as("alice"), "savedPlaces/alice_missing")));
+  });
+});
+
+describe("reports", () => {
+  it("lets a signed-in user file a report as themselves", async () => {
+    await assertSucceeds(setDoc(doc(as("bob"), "reports/r1"), report("bob")));
+  });
+  it("blocks filing a report as someone else", async () => {
+    await assertFails(setDoc(doc(as("bob"), "reports/r1"), report("alice")));
+  });
+  it("blocks a report that is already marked actioned", async () => {
+    await assertFails(setDoc(doc(as("bob"), "reports/r1"), {...report("bob"), status: "actioned"}));
+  });
+  it("blocks reading or editing a report from the app", async () => {
+    await seed("reports/r1", report("bob"));
+    await assertFails(getDoc(doc(as("bob"), "reports/r1")));
+    await assertFails(updateDoc(doc(as("bob"), "reports/r1"), {status: "dismissed"}));
   });
 });
