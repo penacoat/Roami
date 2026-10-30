@@ -65,3 +65,74 @@ Examples:
 
 - [Setup instructions](docs/setup.md)
 - [Team workflow](docs/team-workflow.md)
+
+## Architecture decision: no Cloud Functions (October 2026)
+
+**Decision.** Roami's backend logic runs inside the app, and the app talks to Firebase
+Authentication and Cloud Firestore directly. We do not use Cloud Functions.
+
+**Why.** Our budget is $0, and the project has to keep working after the demo without
+anyone's laptop running a backend. Deploying Cloud Functions requires Firebase's paid
+Blaze plan (a billing account with a payment method). Firebase Authentication and
+Cloud Firestore both have no-cost quotas on the free Spark plan that are well above what
+we need (about 50,000 Firestore reads and 20,000 writes per day, 1 GiB of storage, and
+50,000 monthly active users). Running the backend in the Firebase emulators would only
+work while a laptop is running them.
+
+**What this supersedes.** The original design describes request handlers and services
+running on a server. That description no longer applies. The layering is kept, but all of
+it now runs in `mobile/`.
+
+### What stays the same
+
+- Screens never access Firestore directly. They call `ApiClient`, which calls services,
+  which call repositories. Repositories are the only code that reads or writes Firestore.
+- The API contract and view types in `shared/` (`api.ts`, `views.ts`, `models.ts`).
+  `ApiClient` keeps the same function names and request/response types, but calls local
+  code instead of the network.
+- Authentication (`AuthService`, `AuthProvider`, `AuthScreens`).
+- The pure logic: `SearchMatcher`, `ItineraryPlanner`, `ScheduleValidator`, and
+  `RecommendationValidator` take plain data in and return plain data out, with no Firebase
+  imports.
+- The trip `revision` number, with changes saved in a single Firestore transaction so a
+  failed revision leaves the saved plan unchanged.
+
+### What changes
+
+| Before | Now |
+|---|---|
+| Handlers, services, and repositories run in Cloud Functions | They run inside the app (`mobile/`) |
+| Repositories use the Admin SDK | Repositories use the client SDK |
+| Handlers check identity, ownership, and input | Firestore security rules do these checks |
+| Rules allow reads only; all writes go through the backend | Rules allow validated writes from the app |
+| Moderation and place imports are backend scripts | Admin scripts run from a developer's laptop with the Admin SDK |
+
+### Trade-offs the team has accepted
+
+- **Weaker server-side enforcement.** Security rules can check ownership, document IDs,
+  and revision numbers, but they cannot run the itinerary planner. A modified app could
+  skip the planner's checks, so the planner is enforced by the app, not the server.
+- **No secrets in the app.** Anything shipped in the app can be read, so API keys for
+  external services (for example routing) must be ones we are comfortable exposing, or
+  the data must be fetched ahead of time by an import script.
+- **Free-tier ceilings.** Search should cache results so we stay under the daily Firestore
+  read quota.
+- **Moderation is manual.** Reviewing reports and removing content happens through an
+  admin script run by a team member.
+
+### Still open
+
+- **App distribution.** Expo Go is free but needs a running dev server (`npx expo start`)
+  on someone's laptop. A standalone iOS app through TestFlight or the App Store requires
+  the paid Apple Developer Program (about $99 per year). Options we have not decided:
+  keep demoing through Expo Go, find someone to cover the membership, or test whether a
+  web version hosted on Firebase Hosting works for the map and trips.
+- **Privacy of `users` documents.** Rules cannot hide individual fields, so profile
+  documents must not contain private data such as email addresses. The rules reject an
+  `email` field.
+
+### Local development
+
+We still use the Firebase emulators for Authentication and Firestore, so we can develop,
+seed data, and run the security rules tests without touching the real project. See
+`docs/setup.md`.
