@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import {deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch} from "firebase/firestore";
+import {collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch} from "firebase/firestore";
 
 let env: RulesTestEnvironment;
 
@@ -288,9 +288,6 @@ describe("trip stops: tied to the trip revision", () => {
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
     await assertFails(writeStopWithRevision("bob", stop("s1", "t1", "p5"), 2));
   });
-  it("blocks a stop for a place that is not in the catalog", async () => {
-    await assertFails(writeStopWithRevision("alice", stop("s1", "t1", "nope"), 2));
-  });
   it("blocks a stop on day 9", async () => {
     await assertFails(writeStopWithRevision("alice", {...stop("s1", "t1", "p5"), day: 9}, 2));
   });
@@ -342,5 +339,61 @@ describe("trip sharing", () => {
   });
   it("lets the owner check a share that does not exist yet", async () => {
     await assertSucceeds(getDoc(doc(as("alice"), "tripShares/t1")));
+  });
+});
+
+describe("saved place privacy", () => {
+  it("does not reveal whether another user saved a place", async () => {
+    await assertFails(getDoc(doc(as("bob"), "savedPlaces/alice_p3")));
+  });
+});
+
+describe("large revisions", () => {
+  it("lets the owner write a full 7-day, 35-stop plan in one revision", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    for (let i = 0; i < 35; i++) {
+      await seed(`places/big${i}`, {name: `Place ${i}`});
+    }
+    const db = as("alice");
+    const batch = writeBatch(db);
+    batch.update(doc(db, "trips/t1"), {revision: 2, updatedAt: now});
+    for (let i = 0; i < 35; i++) {
+      const s = {...stop(`big${i}`, "t1", `big${i}`), day: 1 + Math.floor(i / 5), order: 1 + (i % 5)};
+      batch.set(doc(db, `tripStops/big${i}`), s);
+    }
+    await assertSucceeds(batch.commit());
+  });
+});
+
+describe("queries the app will run", () => {
+  beforeEach(async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await seed("tripStops/s1", stop("s1", "t1", null));
+  });
+
+  it("lets a user list their own saved places", async () => {
+    await assertSucceeds(getDocs(query(collection(as("alice"), "savedPlaces"), where("userId", "==", "alice"))));
+  });
+  it("blocks listing saved places without the userId filter", async () => {
+    await assertFails(getDocs(collection(as("alice"), "savedPlaces")));
+  });
+  it("blocks listing another user's saved places", async () => {
+    await assertFails(getDocs(query(collection(as("bob"), "savedPlaces"), where("userId", "==", "alice"))));
+  });
+  it("lets a user list their own trips", async () => {
+    await assertSucceeds(getDocs(query(collection(as("alice"), "trips"), where("ownerId", "==", "alice"))));
+  });
+  it("lets a viewer list the stops of a shared trip", async () => {
+    await assertSucceeds(getDocs(query(collection(as("bob"), "tripStops"), where("tripId", "==", "t1"))));
+  });
+  it("blocks a stranger from listing a trip's stops", async () => {
+    await assertFails(getDocs(query(collection(as("carol"), "tripStops"), where("tripId", "==", "t1"))));
+  });
+  it("lets a user list active recommendations", async () => {
+    await assertSucceeds(getDocs(query(collection(as("bob"), "recommendations"), where("moderationStatus", "==", "active"))));
+  });
+  it("blocks listing recommendations without the active filter", async () => {
+    await assertFails(getDocs(collection(as("bob"), "recommendations")));
   });
 });

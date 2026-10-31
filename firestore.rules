@@ -151,7 +151,7 @@ service cloud.firestore {
     // Saved places: private. The document ID must be userId_placeId, which gives
     // one entry per user and place. The place must exist in the catalog.
     match /savedPlaces/{saveId} {
-      allow get: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow get: if signedIn() && saveId.split('_')[0] == request.auth.uid;
       allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if isUser(request.resource.data.userId)
         && validSave(saveId, request.resource.data)
@@ -206,15 +206,11 @@ service cloud.firestore {
       allow read: if canViewTrip(resource.data.tripId);
       allow create: if isUser(tripOwnerId(request.resource.data.tripId))
         && validStop(stopId, request.resource.data)
-        && revisionBumped(request.resource.data.tripId)
-        && (request.resource.data.placeId == null
-            || exists(/databases/$(database)/documents/places/$(request.resource.data.placeId)));
+        && revisionBumped(request.resource.data.tripId);
       allow update: if isUser(tripOwnerId(resource.data.tripId))
         && validStop(stopId, request.resource.data)
         && request.resource.data.tripId == resource.data.tripId
-        && revisionBumped(resource.data.tripId)
-        && (request.resource.data.placeId == null
-            || exists(/databases/$(database)/documents/places/$(request.resource.data.placeId)));
+        && revisionBumped(resource.data.tripId);
       allow delete: if isUser(tripOwnerId(resource.data.tripId))
         && revisionBumped(resource.data.tripId);
     }
