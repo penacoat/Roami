@@ -4,6 +4,10 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { AuthScreen } from './src/auth/AuthScreens';
 import { signOut } from './src/auth/AuthService';
+import { PlacesCheck } from './src/dev/PlacesCheck';
+import { registerServices } from './src/services';
+
+registerServices();
 
 function Root() {
   const { user, loading } = useAuth();
@@ -26,6 +30,7 @@ function Root() {
       <Pressable style={styles.button} onPress={() => signOut()}>
         <Text style={styles.buttonText}>Sign out</Text>
       </Pressable>
+      <PlacesCheck />
     </View>
   );
 }
@@ -41,6 +46,6 @@ export default function App() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   welcome: { fontSize: 22, marginBottom: 24 },
-  button: { backgroundColor: '#1a73e8', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  button: { backgroundColor: '#1a73e8', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24, marginBottom: 16 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
