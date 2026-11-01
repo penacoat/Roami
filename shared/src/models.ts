@@ -55,6 +55,7 @@ export interface User {
 export interface Place {
   id: PlaceId;
   name: string;
+  city: string;
   latitude: number;
   longitude: number;
   category: string;
