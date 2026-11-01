@@ -201,8 +201,11 @@ it now runs in `mobile/`.
   documents must not contain private data such as email addresses. The rules reject an
   `email` field.
 
-### Local development
+### Local development & Using Emulators
 
 We still use the Firebase emulators for Authentication and Firestore, so we can develop,
 seed data, and run the security rules tests without touching the real project. See
 `docs/setup.md`.
+
+If the app suddenly can’t reach the emulator, rerun ipconfig getifaddr en0 first. The phone and Mac also have to be on the same Wi-Fi.
+
