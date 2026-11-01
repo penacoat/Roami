@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { connectAuthEmulator, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const app = initializeApp({
@@ -14,3 +14,9 @@ const app = initializeApp({
 export const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage),
 });
+// Development only: send sign-in to the Auth emulator on a teammate's laptop.
+// Set EXPO_PUBLIC_EMULATOR_HOST in mobile/.env to that laptop's address.
+const emulatorHost = process.env.EXPO_PUBLIC_EMULATOR_HOST;
+if (emulatorHost) {
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+}
