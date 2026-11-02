@@ -1,4 +1,4 @@
-// Temporary developer check: runs every live profile, trip, map, and feed call through
+// Temporary developer check: runs every live profile, search, trip, map, and feed call through
 // callApi, the same way screens will, and reports each step. In live mode this
 // exercises the real services against Firestore and its security rules. It creates
 // a test trip each time it runs, so use it against the emulator only.
@@ -74,6 +74,16 @@ export async function runBackendCheck(
       'getFeed',
       () => callApi('getFeed', { city: 'Seattle', limit: 5 }),
       (r) => `${r.items.length} items`,
+    );
+    await step(
+      'searchRecommendations',
+      () => callApi('searchRecommendations', { text: 'jazz', interests: [], city: 'Seattle' }),
+      (r) => {
+        const exact = r.results.filter((x) => x.matchLevel === 'exact').length;
+        const first = r.results[0]?.reasons[0];
+        const why = first ? `, first matched "${first.matched}" (${first.kind})` : '';
+        return `${exact} exact, ${r.results.length - exact} broader${why}`;
+      },
     );
 
     let { trip } = await step(

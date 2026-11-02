@@ -4,6 +4,7 @@ import { getFeed } from './DiscoveryService';
 import { getPlace, listPlaces } from './PlaceService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { addStop, moveStop, removeStop } from './RevisionService';
+import { searchRecommendations } from './SearchService';
 import { addCandidate, createTrip, getTrip, listTrips, removeCandidate } from './TripService';
 
 /**
@@ -19,6 +20,7 @@ export function registerServices(): void {
     updateProfile,
     getPlace,
     getFeed,
+    searchRecommendations,
     createTrip,
     listTrips,
     getTrip,
