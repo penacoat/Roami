@@ -2,6 +2,7 @@ import { registerLiveHandlers } from '../api';
 
 import { getFeed } from './DiscoveryService';
 import { getPlace, listPlaces } from './PlaceService';
+import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { addStop, moveStop, removeStop } from './RevisionService';
 import { addCandidate, createTrip, getTrip, listTrips, removeCandidate } from './TripService';
 
@@ -13,6 +14,9 @@ import { addCandidate, createTrip, getTrip, listTrips, removeCandidate } from '.
 export function registerServices(): void {
   registerLiveHandlers({
     listPlaces,
+    ensureProfile,
+    getProfile,
+    updateProfile,
     getPlace,
     getFeed,
     createTrip,

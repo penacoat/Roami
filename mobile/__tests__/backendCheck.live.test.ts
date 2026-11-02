@@ -7,9 +7,13 @@ import { fake } from '../test-utils/fakeFirestore';
 
 jest.mock('firebase/firestore', () => require('../test-utils/fakeFirestore').firestoreModule);
 jest.mock('../src/repositories/firestore', () => ({ db: {} }));
-jest.mock('../src/auth/AuthService', () => ({
-  getCurrentUserId: () => require('../test-utils/fakeFirestore').fake.uid,
-}));
+jest.mock('../src/auth/AuthService', () => {
+  const { fake: f } = require('../test-utils/fakeFirestore');
+  return {
+    getCurrentUserId: () => f.uid,
+    getCurrentUser: () => (f.uid ? { uid: f.uid, email: null, displayName: 'Alice' } : null),
+  };
+});
 // Send callApi straight to the real services, the way live mode does.
 jest.mock('../src/api', () => {
   const actual = jest.requireActual<typeof import('../src/api')>('../src/api');
@@ -17,6 +21,7 @@ jest.mock('../src/api', () => {
     ...actual,
     callApi: (name: string, request: unknown) => {
       const services = {
+        ...jest.requireActual<Record<string, unknown>>('../src/services/ProfileService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/PlaceService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/DiscoveryService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/TripService'),
@@ -63,6 +68,7 @@ it('passes every step through the real services', async () => {
   expect(lines.filter((l) => !l.ok)).toEqual([]);
   expect(lines.map((l) => l.text)).toEqual(
     expect.arrayContaining([
+      'ensureProfile: Alice (created)',
       'getPlace: Place p-a, 1 recommendations',
       'stale edit: refused with "aborted", as expected',
       'All steps passed.',

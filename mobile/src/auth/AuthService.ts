@@ -75,6 +75,14 @@ export function getCurrentUserId(): string | null {
   return auth.currentUser?.uid ?? null;
 }
 
+/**
+ * The signed-in user, or null. Read when called, so it includes a display name
+ * set after sign-up (the user AuthProvider holds may not have it yet).
+ */
+export function getCurrentUser(): AuthUser | null {
+  return auth.currentUser ? toAuthUser(auth.currentUser) : null;
+}
+
 /** Calls the callback now and whenever the user signs in or out. Returns an unsubscribe function. */
 export function subscribeToAuthChanges(callback: (user: AuthUser | null) => void): () => void {
   return onAuthStateChanged(auth, (user) => callback(user ? toAuthUser(user) : null));

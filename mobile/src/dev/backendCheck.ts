@@ -1,4 +1,4 @@
-// Temporary developer check: runs every live trip, map, and feed call through
+// Temporary developer check: runs every live profile, trip, map, and feed call through
 // callApi, the same way screens will, and reports each step. In live mode this
 // exercises the real services against Firestore and its security rules. It creates
 // a test trip each time it runs, so use it against the emulator only.
@@ -39,6 +39,24 @@ export async function runBackendCheck(
   };
 
   try {
+    await step(
+      'ensureProfile',
+      () => callApi('ensureProfile', {}),
+      (r) => `${r.profile.name} (${r.created ? 'created' : 'already existed'})`,
+    );
+    const { profile } = await step(
+      'getProfile',
+      () => callApi('getProfile', {}),
+      (r) => `${r.profile.name}, ${r.profile.interests.length} interests`,
+    );
+    await step(
+      'updateProfile',
+      // Saves the same interests back, so the check exercises the write without
+      // changing anything.
+      () => callApi('updateProfile', { interests: profile.interests }),
+      (r) => `saved, still ${r.profile.interests.length} interests`,
+    );
+
     const { places } = await step(
       'listPlaces',
       () => callApi('listPlaces', { city: 'Seattle' }),
