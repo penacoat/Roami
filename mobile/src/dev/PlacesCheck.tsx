@@ -35,7 +35,13 @@ export function PlacesCheck() {
 const styles = StyleSheet.create({
   box: { width: '100%', maxHeight: 360, padding: 16 },
   mode: { fontSize: 14, color: '#555', marginBottom: 8, textAlign: 'center' },
-  button: { backgroundColor: '#1a73e8', borderRadius: 8, padding: 12, alignItems: 'center', marginBottom: 8 },
+  button: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   scroll: { flexGrow: 0 },
   result: { fontSize: 14 },

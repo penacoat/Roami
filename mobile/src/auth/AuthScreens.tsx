@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 
 import { signIn, signUp } from './AuthService';

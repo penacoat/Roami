@@ -1,9 +1,4 @@
-import type {
-  ApiErrorCode,
-  ApiFunctionName,
-  ApiRequest,
-  ApiResponse,
-} from '@roami/shared';
+import type { ApiErrorCode, ApiFunctionName, ApiRequest, ApiResponse } from '@roami/shared';
 
 import { fixtureHandlers } from './fixtureHandlers';
 import { ApiError, type ApiHandlers } from './types';

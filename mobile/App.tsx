@@ -46,6 +46,12 @@ export default function App() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   welcome: { fontSize: 22, marginBottom: 24 },
-  button: { backgroundColor: '#1a73e8', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24, marginBottom: 16 },
+  button: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
