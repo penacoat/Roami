@@ -1,211 +1,159 @@
 # Roami
-Roami is an iOS mobile social travel discovery and planning app designed to feel like a knowledgeable local who understands your interests. Users can search for something specific, explore recommendations on a map, or find inspiration in a feed of friends' trips and linked social posts. Recommendations show who suggested a place and what they liked about it. Roami connects finding somewhere worth going with figuring out how to go.
 
-## Repository Layout
-```
-roami/
-├── mobile/                          # Expo + React Native + TS
-│   └── src/
-│       ├── auth/                    # AuthService.ts, AuthProvider.tsx, AuthScreens.tsx
-│       ├── screens/                 # ProfileScreen, DiscoveryScreen, SavedPlacesScreen,
-│       │                            # ItineraryScreen, VisitRankingScreen
-│       ├── components/              # RecommendationCard, RecommendationEditor,
-│       │                            # PlaceMap, TripOverview
-│       └── api/ApiClient.ts         # the only way screens reach the backend
-├── backend/                         # Cloud Functions (functions source dir)
-│   └── src/
-│       ├── handlers/                # validate input (zod) + call Authorization
-│       ├── authorization.ts
-│       ├── services/                # search/ (SearchMatcher, DiscoveryService), social/,
-│       │                            # saves/, trips/, revision/, preparation/,
-│       │                            # visits/, safety/ (BlockService, ModerationService)
-│       ├── planner/                 # ItineraryPlanner.ts, ScheduleValidator.ts (pure)
-│       ├── repositories/            # User, Content, Travel, Moderation
-│       ├── adapters/                # PlaceDataAdapter.ts, RoutingAdapter.ts
-│       └── scripts/                 # admin moderation script, pilot place import
-├── shared/
-│   └── src/models.ts                # types for every Firestore collection + zod schemas
-├── tests/                           # rules tests, planner fixtures, end-to-end
-├── docs/                            # architecture, spike-places-routing.md
-├── .github/workflows/ci.yml
-├── firestore.rules
-├── firestore.indexes.json
-├── firebase.json                    # "functions": { "source": "backend" }
-├── eslint.config.js (or .eslintrc.cjs)
-├── .prettierrc
-├── tsconfig.base.json
-└── package.json                     # "workspaces": ["mobile", "backend", "shared"]
+Roami is an iOS app for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for something specific, explore recommendations on a map, and save places. They can then turn those places into an itinerary. Recommendations show who suggested a place and what they liked about it, and that context stays attached as places move into a trip.
 
-mobile/ --> the React Native iOS app, contains everything users see and interact with 
-backend/ --> the server that stores data and handles search, recommendations, trips, and social features
-docs/ --> project documentation, such as specs, architecture notes, API references, etc
-scripts/ --> Helper scripts for setup and running the project locally 
-.github/ --> GitHub automation, templates, like for pull requests
-README.md --> What Roami is, why it's useful, and how to get started using or working on it depending who you are
-CONTRIBUTING.md --> Instructions for setup, branching, and how to submit changes
-LICENSE --> legal terms under which the code can be used
-.env.example --> environment variables the project needs
-```
-## Architecture decision: no Cloud Functions (October 2026)
+The MVP covers Pike Place Market and nearby downtown Seattle.
 
-**Decision.** Roami's backend logic runs inside the app, and the app talks to Firebase
-Authentication and Cloud Firestore directly. We do not use Cloud Functions.
+## Status (November 1, 2026)
 
-**Why.** Our budget is $0, and the project has to keep working after the demo without
-anyone's laptop running a backend. Deploying Cloud Functions requires Firebase's paid
-Blaze plan (a billing account with a payment method). Firebase Authentication and
-Cloud Firestore both have no-cost quotas on the free Spark plan that are well above what
-we need (about 50,000 Firestore reads and 20,000 writes per day, 1 GiB of storage, and
-50,000 monthly active users). Running the backend in the Firebase emulators would only
-work while a laptop is running them.
+The app runs in Expo Go. Every screen gets its data through one API layer, `callApi`. That layer returns realistic sample data ("fixtures") until a real service replaces each function. Real services read and write Cloud Firestore.
 
-**What this supersedes.** The original design describes request handlers and services
-running on a server. That description no longer applies. The layering is kept, but all of
-it now runs in `mobile/`.
-
-### What stays the same
-
-- Screens never access Firestore directly. They call `ApiClient`, which calls services,
-  which call repositories. Repositories are the only code that reads or writes Firestore.
-- The API contract and view types in `shared/` (`api.ts`, `views.ts`, `models.ts`).
-  `ApiClient` keeps the same function names and request/response types, but calls local
-  code instead of the network.
-- Authentication (`AuthService`, `AuthProvider`, `AuthScreens`).
-- The pure logic: `SearchMatcher`, `ItineraryPlanner`, `ScheduleValidator`, and
-  `RecommendationValidator` take plain data in and return plain data out, with no Firebase
-  imports.
-- The trip `revision` number, with changes saved in a single Firestore transaction so a
-  failed revision leaves the saved plan unchanged.
-
-### What changes
-
-| Before | Now |
+| Use case | Status |
 |---|---|
-| Handlers, services, and repositories run in Cloud Functions | They run inside the app (`mobile/`) |
-| Repositories use the Admin SDK | Repositories use the client SDK |
-| Handlers check identity, ownership, and input | Firestore security rules do these checks |
-| Rules allow reads only; all writes go through the backend | Rules allow validated writes from the app |
-| Moderation and place imports are backend scripts | Admin scripts run from a developer's laptop with the Admin SDK |
+| Create an account, sign in, stay signed in, sign out | **Operational** against Firebase Authentication (or the Auth emulator) |
+| Discover places that match an interest (search, map) | In progress. Place list is live from Firestore. Search and the map screen run on fixtures. |
+| Save a place for later | In progress. Runs on fixtures. Security rules for saves are done. |
+| Create an itinerary | In progress. Runs on fixtures. Security rules for trips and stops are done. |
+| Adjust an existing itinerary | In progress. Runs on fixtures, including the stale-edit check. |
+| Share a recommendation collection | Not started |
+| Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
 
-### Trade-offs the team has accepted
+The only screens so far are sign-in/sign-up and a temporary "Load places" check (`mobile/src/dev/PlacesCheck.tsx`) that proves the data layer works.
 
-- **Weaker server-side enforcement.** Security rules can check ownership, document IDs,
-  and revision numbers, but they cannot run the itinerary planner. A modified app could
-  skip the planner's checks, so the planner is enforced by the app, not the server.
-- **No secrets in the app.** Anything shipped in the app can be read, so API keys for
-  external services (for example routing) must be ones we are comfortable exposing, or
-  the data must be fetched ahead of time by an import script.
-- **Free-tier ceilings.** Search should cache results so we stay under the daily Firestore
-  read quota.
-- **Moderation is manual.** Reviewing reports and removing content happens through an
-  admin script run by a team member.
+## Architecture: no Cloud Functions (decided October 2026)
 
-### Still open
+Roami's backend logic runs inside the app. The app talks to Firebase Authentication and Cloud Firestore directly. There is no server.
 
-- **App distribution.** Expo Go is free but needs a running dev server (`npx expo start`)
-  on someone's laptop. A standalone iOS app through TestFlight or the App Store requires
-  the paid Apple Developer Program (about $99 per year). Options we have not decided:
-  keep demoing through Expo Go, find someone to cover the membership, or test whether a
-  web version hosted on Firebase Hosting works for the map and trips.
-- **Privacy of `users` documents.** Rules cannot hide individual fields, so profile
-  documents must not contain private data such as email addresses.
+**Why.** The budget is $0, and the app has to keep working after the demo without anyone's laptop running a backend. Deploying Cloud Functions requires Firebase's paid Blaze plan. Authentication and Firestore have free quotas on the Spark plan that are well above what we need: about 50,000 reads and 20,000 writes per day, 1 GiB of storage, and 50,000 monthly active users.
 
-### Local development
+**How a request flows.**
 
-We still use the Firebase emulators for Authentication and Firestore, so we can develop,
-seed data, and run the security rules tests without touching the real project. See
-`docs/setup.md`.
+```
+Screen → callApi('name', request) → service → repository → Firestore
+```
 
+- **Screens** call only `callApi`. They never import Firebase.
+- **Services** (`mobile/src/services/`) check the request, call repositories and pure logic, and return the response type from the contract. They throw `ApiError` with a code (`invalid-argument`, `not-found`, `aborted`, ...).
+- **Repositories** (`mobile/src/repositories/`) are the only code that reads or writes Firestore.
+- **Pure logic** (`mobile/src/logic/`, created with the first piece) holds search matching, the itinerary planner, and validators. Plain data in, plain data out, no Firebase imports.
+- **The contract** (`shared/src/api.ts`, `views.ts`, `models.ts`) defines every call's request and response, and every Firestore document.
+- **`firestore.rules`** is the only server-side enforcement. It checks identity, ownership, document IDs, field shapes, and that each trip change raises the trip's `revision` by exactly one.
 
-## Living Document 
-https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing
-* must be signed into a UW email to access
+**Trade-offs we accepted.**
 
-## Branch naming
+- **Some checks live only in the app.** The rules cannot run the planner, count stops per day, or check that a stop's place exists, so a modified app could skip those checks.
+- **Nothing in the app is secret.** Anything shipped in the app can be read. Only use API keys we are comfortable exposing, or fetch data ahead of time with an admin script.
+- **Free-tier ceilings.** Search should cache results to stay under the daily read quota.
+- **Moderation is manual.** Reviewing reports and removing content happens through an admin script.
 
-Format: `<github-username>/<short-description>`
+**Still open.**
 
-Examples:
-- `penacoat/auth`
-- `penacoat/shared-models`
-- `jsmith/fix-search-typo`
+- **App distribution.** Expo Go is free but needs someone's laptop running `npx expo start`. A standalone app through TestFlight needs the paid Apple Developer Program (about $99 per year).
+- **Profile privacy.** Rules cannot hide individual fields, so profile documents must never hold private data such as email. The rules reject an `email` field.
 
+## Repository layout
 
-## Documentation
+```
+Roami/
+├── mobile/                      # The iOS app (Expo + React Native + TypeScript)
+│   ├── App.tsx                  # Entry point: sign-in gate, then the app
+│   ├── src/
+│   │   ├── api/                 # callApi, ApiError, fixture data and handlers
+│   │   ├── services/            # One file per component's logic (PlaceService so far)
+│   │   ├── repositories/        # Firestore reads and writes (PlaceRepository so far)
+│   │   ├── auth/                # AuthService, AuthProvider, AuthScreens, Firebase setup
+│   │   └── dev/                 # Temporary developer checks (PlacesCheck)
+│   ├── __tests__/               # Jest tests for the app
+│   └── .env.example             # Environment variables the app needs
+├── shared/src/                  # The contract: api.ts, views.ts, models.ts (types only)
+├── backend/                     # Not a server: rules tests, seed script, leftover placeholder function
+│   ├── test/                    # Security rules tests (run against the Firestore emulator)
+│   └── src/scripts/seed.ts      # Loads sample data into the emulator
+├── docs/                        # Setup and developer guides
+├── firestore.rules              # Security rules
+├── firestore.indexes.json       # Firestore indexes
+├── firebase.json                # Firebase and emulator configuration
+└── .github/workflows/           # CI (runs the mobile tests)
+```
 
-- [Setup instructions](docs/setup.md)
-- [Team workflow](docs/team-workflow.md)
+`backend/` keeps its name for now, but do not add Cloud Functions to it. `backend/src/index.ts` holds an unused `healthCheck` placeholder.
 
-## Architecture decision: no Cloud Functions (October 2026)
+## Getting started
 
-**Decision.** Roami's backend logic runs inside the app, and the app talks to Firebase
-Authentication and Cloud Firestore directly. We do not use Cloud Functions.
+You need a Mac, an iPhone, Node 20 or newer, and Git.
 
-**Why.** Our budget is $0, and the project has to keep working after the demo without
-anyone's laptop running a backend. Deploying Cloud Functions requires Firebase's paid
-Blaze plan (a billing account with a payment method). Firebase Authentication and
-Cloud Firestore both have no-cost quotas on the free Spark plan that are well above what
-we need (about 50,000 Firestore reads and 20,000 writes per day, 1 GiB of storage, and
-50,000 monthly active users). Running the backend in the Firebase emulators would only
-work while a laptop is running them.
+1. Install **Expo Go** on your iPhone (latest version; the project uses Expo SDK 58) and create a free Expo account.
+2. Clone the repo and install the app's dependencies:
 
-**What this supersedes.** The original design describes request handlers and services
-running on a server. That description no longer applies. The layering is kept, but all of
-it now runs in `mobile/`.
+   ```bash
+   git clone https://github.com/penacoat/Roami.git
+   cd Roami/mobile
+   npm install
+   ```
 
-### What stays the same
+3. Copy `mobile/.env.example` to `mobile/.env` and fill in the Firebase values (ask the team or see the living document). Never commit `.env`.
+4. Start the app and scan the QR code with your iPhone camera:
 
-- Screens never access Firestore directly. They call `ApiClient`, which calls services,
-  which call repositories. Repositories are the only code that reads or writes Firestore.
-- The API contract and view types in `shared/` (`api.ts`, `views.ts`, `models.ts`).
-  `ApiClient` keeps the same function names and request/response types, but calls local
-  code instead of the network.
-- Authentication (`AuthService`, `AuthProvider`, `AuthScreens`).
-- The pure logic: `SearchMatcher`, `ItineraryPlanner`, `ScheduleValidator`, and
-  `RecommendationValidator` take plain data in and return plain data out, with no Firebase
-  imports.
-- The trip `revision` number, with changes saved in a single Firestore transaction so a
-  failed revision leaves the saved plan unchanged.
+   ```bash
+   npx expo start
+   ```
 
-### What changes
+With `EXPO_PUBLIC_API_MODE` left empty, every API call returns sample data, so no backend setup is needed to build screens. Full setup steps and troubleshooting are in [docs/mobile-app-setup.md](docs/mobile-app-setup.md) and [docs/firebase-setup.md](docs/firebase-setup.md).
 
-| Before | Now |
+## Working on the data layer (emulators)
+
+Backend work runs against the **Firebase emulators**, so nothing touches real data. You also need Java 21 or newer and the Firebase CLI. Install the backend tools once with `npm --prefix backend install`.
+
+Use three terminal tabs from the repo root:
+
+| Tab | Command | Notes |
+|---|---|---|
+| 1 | `firebase emulators:start` | Leave running. Emulator UI at http://127.0.0.1:4000 |
+| 2 | `npm --prefix backend run seed` | Loads sample places and recommendations. Rerun after every emulator restart. |
+| 3 | `cd mobile && npx expo start --clear` | Leave running. |
+
+To use real services instead of fixtures, add these lines to `mobile/.env` and restart Expo with `--clear`:
+
+```
+EXPO_PUBLIC_API_MODE=live
+EXPO_PUBLIC_EMULATOR_HOST=<your laptop's address>
+```
+
+Find your address with `ipconfig getifaddr en0`. It changes when you switch Wi-Fi networks, and your phone and laptop must be on the same network. In live mode, sign-in goes to the Auth emulator, so create a new test account there.
+
+Functions with no real service yet still use fixtures, so fixtures can be replaced one at a time. [docs/where-code-goes.md](docs/where-code-goes.md) explains how, using `PlaceRepository.ts` and `PlaceService.ts` as the example.
+
+## Running tests
+
+```bash
+# App tests (Jest + jest-expo); these also run in CI on every pull request
+npm --prefix mobile test
+
+# Security rules tests (65 tests). Stop any running emulators first; they need port 8080.
+firebase emulators:exec --only firestore "npm --prefix backend run test:rules"
+```
+
+CI (`.github/workflows/mobile-ci.yml`) runs only the app tests. The rules tests are run locally.
+
+## Team workflow
+
+- **Never commit to `main`.** Work on a branch, open a pull request, and get a review.
+- **Branch names:** `<github-username>/<short-description>`, for example `penacoat/place-slice` or `bhelle/trips`.
+- **Changes to `shared/`** get their own small pull request, and the whole team reviews them. Prefer adding fields to renaming or removing them.
+- **Import shared types with `import type`.** A normal import from `@roami/shared` crashes the app. See [docs/shared-models.md](docs/shared-models.md).
+- **`null` means unknown.** Never turn a missing walking time or opening hours into `0` or "closed."
+- **Never commit** `.env`, service account keys, `node_modules/`, `backend/lib/`, or debug logs. Don't run `npm audit fix --force`.
+- **Style:** Google's TypeScript guide and Airbnb's React guide. See [docs/coding-guidelines.md](docs/coding-guidelines.md).
+
+## Team
+
+| Name | Role |
 |---|---|
-| Handlers, services, and repositories run in Cloud Functions | They run inside the app (`mobile/`) |
-| Repositories use the Admin SDK | Repositories use the client SDK |
-| Handlers check identity, ownership, and input | Firestore security rules do these checks |
-| Rules allow reads only; all writes go through the backend | Rules allow validated writes from the app |
-| Moderation and place imports are backend scripts | Admin scripts run from a developer's laptop with the Admin SDK |
+| Antonia Kwan | Project Manager, UI and frontend |
+| Ameli Graff | UI and frontend |
+| Athena Bao | UX research, frontend |
+| Rui Chu | Scrum Master, backend |
+| Penelope Coates | Backup Scrum Master, backend |
+| Brooklyn Helle | Backend |
 
-### Trade-offs the team has accepted
-
-- **Weaker server-side enforcement.** Security rules can check ownership, document IDs,
-  and revision numbers, but they cannot run the itinerary planner. A modified app could
-  skip the planner's checks, so the planner is enforced by the app, not the server.
-- **No secrets in the app.** Anything shipped in the app can be read, so API keys for
-  external services (for example routing) must be ones we are comfortable exposing, or
-  the data must be fetched ahead of time by an import script.
-- **Free-tier ceilings.** Search should cache results so we stay under the daily Firestore
-  read quota.
-- **Moderation is manual.** Reviewing reports and removing content happens through an
-  admin script run by a team member.
-
-### Still open
-
-- **App distribution.** Expo Go is free but needs a running dev server (`npx expo start`)
-  on someone's laptop. A standalone iOS app through TestFlight or the App Store requires
-  the paid Apple Developer Program (about $99 per year). Options we have not decided:
-  keep demoing through Expo Go, find someone to cover the membership, or test whether a
-  web version hosted on Firebase Hosting works for the map and trips.
-- **Privacy of `users` documents.** Rules cannot hide individual fields, so profile
-  documents must not contain private data such as email addresses. The rules reject an
-  `email` field.
-
-### Local development & Using Emulators
-
-We still use the Firebase emulators for Authentication and Firestore, so we can develop,
-seed data, and run the security rules tests without touching the real project. See
-`docs/setup.md`.
-
-If the app suddenly can’t reach the emulator, rerun ipconfig getifaddr en0 first. The phone and Mac also have to be on the same Wi-Fi.
-
+Living document (requirements, design, and process): https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing
