@@ -21,4 +21,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
-      - run: npm run test:ci
+      - name: Lint (ESLint, including layering rules)
+        run: npm run lint
+      - name: Check formatting (Prettier)
+        run: npm run format:check
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm run test:ci

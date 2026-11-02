@@ -10,7 +10,12 @@ export const ME: PublicUser = {
 };
 
 export const OTHER_USERS: PublicUser[] = [
-  { id: 'u-maya', name: 'Maya', bio: 'Exchange student. Loves live music.', interests: ['jazz', 'food'] },
+  {
+    id: 'u-maya',
+    name: 'Maya',
+    bio: 'Exchange student. Loves live music.',
+    interests: ['jazz', 'food'],
+  },
   { id: 'u-jonas', name: 'Jonas', bio: 'Local. Coffee and parks.', interests: ['coffee', 'parks'] },
 ];
 
@@ -69,12 +74,51 @@ const rec = (
 });
 
 export const RECOMMENDATIONS: RecommendationView[] = [
-  rec('r1', 'p-jazz', MAYA, 'Small room, great trio on weekends. Go early to get a table near the stage.', ['jazz', 'live music', 'nightlife']),
-  rec('r2', 'p-kerry', JONAS, 'Best skyline view in the city, especially at sunset. Free.', ['views', 'sunset', 'free']),
-  rec('r3', 'p-pike', MAYA, 'Go before 10 to beat the crowds. Get a pastry and walk the lower levels.', ['food', 'market', 'morning']),
-  rec('r4', 'p-cafe', JONAS, 'Used to have jazz nights, but it no longer has jazz. Still good coffee and quiet for studying.', ['cafe', 'coffee', 'study']),
-  rec('r5', 'p-sam', MAYA, 'Free first Thursday evenings. The Pacific Northwest gallery is the highlight.', ['museum', 'art', 'free']),
-  rec('r6', 'p-park', JONAS, 'Big loop trail with water views. Bring a jacket, it gets windy.', ['parks', 'hiking', 'views']),
-  rec('r7', 'p-chihuly', MAYA, 'Worth it for the glasshouse. Book ahead in summer.', ['art', 'museum']),
-  rec('r8', 'p-jazz', JONAS, 'Dinner and a show. Pricey but the sound is great.', ['jazz', 'live music', 'dinner']),
+  rec(
+    'r1',
+    'p-jazz',
+    MAYA,
+    'Small room, great trio on weekends. Go early to get a table near the stage.',
+    ['jazz', 'live music', 'nightlife'],
+  ),
+  rec('r2', 'p-kerry', JONAS, 'Best skyline view in the city, especially at sunset. Free.', [
+    'views',
+    'sunset',
+    'free',
+  ]),
+  rec(
+    'r3',
+    'p-pike',
+    MAYA,
+    'Go before 10 to beat the crowds. Get a pastry and walk the lower levels.',
+    ['food', 'market', 'morning'],
+  ),
+  rec(
+    'r4',
+    'p-cafe',
+    JONAS,
+    'Used to have jazz nights, but it no longer has jazz. Still good coffee and quiet for studying.',
+    ['cafe', 'coffee', 'study'],
+  ),
+  rec(
+    'r5',
+    'p-sam',
+    MAYA,
+    'Free first Thursday evenings. The Pacific Northwest gallery is the highlight.',
+    ['museum', 'art', 'free'],
+  ),
+  rec('r6', 'p-park', JONAS, 'Big loop trail with water views. Bring a jacket, it gets windy.', [
+    'parks',
+    'hiking',
+    'views',
+  ]),
+  rec('r7', 'p-chihuly', MAYA, 'Worth it for the glasshouse. Book ahead in summer.', [
+    'art',
+    'museum',
+  ]),
+  rec('r8', 'p-jazz', JONAS, 'Dinner and a show. Pricey but the sound is great.', [
+    'jazz',
+    'live music',
+    'dinner',
+  ]),
 ];
