@@ -11,7 +11,7 @@ The app runs in Expo Go. Every screen gets its data through one API layer, `call
 | Use case | Status |
 |---|---|
 | Create an account, sign in, stay signed in, sign out | **Operational** against Firebase Authentication (or the Auth emulator) |
-| Discover places that match an interest (search, map) | In progress. Place list is live from Firestore. Search and the map screen run on fixtures. |
+| Discover places that match an interest (search, map) | In progress. Place list, place details, and the feed read live from Firestore (`listPlaces`, `getPlace`, `getFeed`). Search and the map screen run on fixtures. |
 | Save a place for later | In progress. Runs on fixtures. Security rules for saves are done. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
