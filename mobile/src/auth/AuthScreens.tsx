@@ -7,9 +7,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 
+import { callApi } from '../api';
 import { signIn, signUp } from './AuthService';
 
 export function AuthScreen() {
@@ -32,6 +32,13 @@ export function AuthScreen() {
     try {
       if (isSignUp) {
         await signUp(email, password, name);
+        // Create the public profile with the name typed here. App.tsx can't do
+        // this for a new account because it learns about the user before the
+        // name is saved.
+        await callApi('ensureProfile', { displayName: name.trim() }).catch((profileError) => {
+          // eslint-disable-next-line no-console
+          console.warn('[profile] Could not create the profile after sign-up.', profileError);
+        });
       } else {
         await signIn(email, password);
       }

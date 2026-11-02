@@ -1,9 +1,4 @@
-import type {
-  ApiErrorCode,
-  ApiFunctionName,
-  ApiRequest,
-  ApiResponse,
-} from '@roami/shared';
+import type { ApiErrorCode, ApiFunctionName, ApiRequest, ApiResponse } from '@roami/shared';
 
 /** The one error type screens need to handle. `code` says what went wrong. */
 export class ApiError extends Error {

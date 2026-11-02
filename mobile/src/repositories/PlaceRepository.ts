@@ -1,5 +1,13 @@
 import type { PlaceSummary } from '@roami/shared';
-import { collection, getDocs, query, where, type DocumentData } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  type DocumentData,
+} from 'firebase/firestore';
 
 import { db } from './firestore';
 
@@ -23,4 +31,15 @@ function toPlaceSummary(id: string, data: DocumentData): PlaceSummary {
 export async function listPlacesInCity(city: string): Promise<PlaceSummary[]> {
   const snapshot = await getDocs(query(collection(db, PLACES), where('city', '==', city)));
   return snapshot.docs.map((d) => toPlaceSummary(d.id, d.data()));
+}
+
+/** The places that exist, keyed by ID. IDs with no catalog place are left out. */
+export async function getPlacesByIds(placeIds: string[]): Promise<Map<string, PlaceSummary>> {
+  const unique = [...new Set(placeIds)];
+  const snapshots = await Promise.all(unique.map((id) => getDoc(doc(db, PLACES, id))));
+  const places = new Map<string, PlaceSummary>();
+  for (const snapshot of snapshots) {
+    if (snapshot.exists()) places.set(snapshot.id, toPlaceSummary(snapshot.id, snapshot.data()));
+  }
+  return places;
 }
