@@ -12,13 +12,13 @@ The app runs in Expo Go. Every screen gets its data through one API layer, `call
 |---|---|
 | Create an account, sign in, stay signed in, sign out | **Operational** against Firebase Authentication (or the Auth emulator). A public profile is created on sign-up and sign-in, and profiles are live (`ensureProfile`, `getProfile`, `updateProfile`). No profile screen yet. |
 | Discover places that match an interest (search, map) | In progress. Search, the place list, place details, and the feed are live (`searchRecommendations`, `listPlaces`, `getPlace`, `getFeed`). Search matches tags and written text, including synonyms and prefixes, skips negations such as "no longer has jazz", and explains each match. No search or map screen yet. |
-| Save a place for later | In progress. Runs on fixtures. Security rules for saves are done. |
+| Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. A recommendation removed later shows as unavailable without affecting the save. No saved places screen yet. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
 | Share a recommendation collection | Not started |
 | Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
 
-The only screens so far are sign-in/sign-up and a temporary developer screen (`mobile/src/dev/PlacesCheck.tsx`). Its "Run backend check" button runs the live profile, place, feed, search, and trip calls and shows PASS or FAIL for each step.
+The only screens so far are sign-in/sign-up and a temporary developer screen (`mobile/src/dev/PlacesCheck.tsx`). Its "Run backend check" button runs the live profile, place, feed, search, saved place, and trip calls and shows PASS or FAIL for each step.
 
 ## Architecture: no Cloud Functions (decided October 2026)
 

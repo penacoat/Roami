@@ -1,5 +1,13 @@
 import type { ModerationStatus, Recommendation } from '@roami/shared';
-import { collection, getDocs, query, where, type DocumentData } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  type DocumentData,
+} from 'firebase/firestore';
 
 import { db } from './firestore';
 
@@ -56,4 +64,26 @@ export async function listActiveForPlaces(placeIds: string[]): Promise<Recommend
     ),
   );
   return snapshots.flatMap((s) => s.docs.map((d) => toRecommendation(d.id, d.data())));
+}
+
+/**
+ * The recommendations among these IDs that the user can see, keyed by ID. The
+ * rules hide removed and hidden recommendations from everyone but their
+ * author, so those, and IDs that don't exist, are left out.
+ */
+export async function getRecommendationsByIds(ids: string[]): Promise<Map<string, Recommendation>> {
+  const unique = [...new Set(ids)].filter((id) => id.length > 0);
+  const found = await Promise.all(
+    unique.map(async (id) => {
+      try {
+        const snapshot = await getDoc(doc(db, RECOMMENDATIONS, id));
+        return snapshot.exists() ? toRecommendation(snapshot.id, snapshot.data()) : null;
+      } catch (error) {
+        const code = (error as { code?: unknown } | null)?.code;
+        if (code === 'permission-denied') return null;
+        throw error;
+      }
+    }),
+  );
+  return new Map(found.flatMap((r) => (r ? [[r.id, r] as const] : [])));
 }

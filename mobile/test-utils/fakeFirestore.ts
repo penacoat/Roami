@@ -139,6 +139,9 @@ function checkRead(ref: DocRef, data: Data | undefined) {
         throw deny('recommendation is not active');
       }
       return;
+    case 'savedPlaces':
+      if (ref.id.split('_')[0] !== uid) throw deny('saved places are private');
+      return;
     default:
       throw deny(`no read rule for ${ref.collection} in the fake`);
   }
@@ -163,6 +166,9 @@ function checkQuery(q: Query) {
       if (eq('moderationStatus')?.value !== 'active') {
         throw deny("recommendation queries need where moderationStatus == 'active'");
       }
+      return;
+    case 'savedPlaces':
+      if (eq('userId')?.value !== uid) throw deny('saved place queries need where userId == me');
       return;
     default:
       throw deny(`no list rule for ${q.collection} in the fake`);
@@ -240,6 +246,38 @@ function checkWrite(
     if (!Array.isArray(next.interests) || next.interests.length > 20) throw deny('bad interests');
     if (typeof next.createdAt !== 'string') throw deny('createdAt must be a string');
     if (previous && next.createdAt !== previous.createdAt) throw deny('createdAt cannot change');
+    return;
+  }
+
+  if (collectionName === 'savedPlaces') {
+    if (!next) {
+      if (!previous) throw deny('deleting a save that does not exist');
+      if (previous.userId !== uid) throw deny('only the owner can delete a save');
+      return;
+    }
+    const allowed = ['id', 'userId', 'placeId', 'recommendationIds', 'personalNote', 'createdAt'];
+    if (Object.keys(next).some((k) => !allowed.includes(k))) {
+      throw deny(`save fields ${Object.keys(next).join(',')}`);
+    }
+    if (next.id !== id) throw deny('save id must match the document ID');
+    if (id !== `${String(next.userId)}_${String(next.placeId)}`) {
+      throw deny('save ID must be userId_placeId');
+    }
+    if (typeof next.placeId !== 'string' || next.placeId.length < 1) throw deny('bad placeId');
+    const recIds = next.recommendationIds;
+    if (!Array.isArray(recIds) || recIds.length > 25) throw deny('bad recommendationIds');
+    const note = next.personalNote;
+    if (typeof note !== 'string' || note.length > 2000) throw deny('bad personalNote');
+    if (typeof next.createdAt !== 'string') throw deny('createdAt must be a string');
+    if (!previous) {
+      if (next.userId !== uid) throw deny('you can only save for yourself');
+      if (!before.has(`places/${next.placeId}`)) throw deny('the place must exist');
+      return;
+    }
+    if (previous.userId !== uid) throw deny('only the owner can change a save');
+    for (const field of ['userId', 'placeId', 'createdAt']) {
+      if (next[field] !== previous[field]) throw deny(`${field} cannot change`);
+    }
     return;
   }
 

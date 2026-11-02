@@ -25,6 +25,7 @@ jest.mock('../src/api', () => {
         ...jest.requireActual<Record<string, unknown>>('../src/services/PlaceService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/DiscoveryService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/SearchService'),
+        ...jest.requireActual<Record<string, unknown>>('../src/services/SaveService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/TripService'),
         ...jest.requireActual<Record<string, unknown>>('../src/services/RevisionService'),
       } as Record<string, (r: unknown) => Promise<unknown>>;
@@ -72,6 +73,8 @@ it('passes every step through the real services', async () => {
       'ensureProfile: Alice (created)',
       'getPlace: Place p-a, 1 recommendations',
       'searchRecommendations: 1 exact, 0 broader, first matched "jazz" (exact)',
+      'savePlace: Place p-a, 1 recommendation',
+      'listSavedPlaces: 1 saved, note kept',
       'stale edit: refused with "aborted", as expected',
       'All steps passed.',
     ]),
