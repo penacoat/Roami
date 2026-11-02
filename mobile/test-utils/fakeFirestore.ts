@@ -226,6 +226,23 @@ function checkWrite(
     return;
   }
 
+  if (collectionName === 'users') {
+    if (id !== uid) throw deny('you can only write your own profile');
+    if (!next) throw deny('profiles cannot be deleted');
+    const allowed = ['id', 'name', 'bio', 'interests', 'createdAt'];
+    if (Object.keys(next).some((k) => !allowed.includes(k))) {
+      throw deny(`profile fields ${Object.keys(next).join(',')}`);
+    }
+    if (next.id !== id) throw deny('profile id must match the document ID');
+    const name = next.name;
+    if (typeof name !== 'string' || name.length < 1 || name.length > 60) throw deny('bad name');
+    if (typeof next.bio !== 'string' || next.bio.length > 500) throw deny('bad bio');
+    if (!Array.isArray(next.interests) || next.interests.length > 20) throw deny('bad interests');
+    if (typeof next.createdAt !== 'string') throw deny('createdAt must be a string');
+    if (previous && next.createdAt !== previous.createdAt) throw deny('createdAt cannot change');
+    return;
+  }
+
   throw deny(`no write rule for ${collectionName} in the fake`);
 }
 

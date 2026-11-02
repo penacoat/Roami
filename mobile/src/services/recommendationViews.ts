@@ -2,7 +2,7 @@ import type { PlaceSummary, Recommendation, RecommendationView } from '@roami/sh
 
 import { getUserNames } from '../repositories/UserRepository';
 
-/** Shown when an author has no profile yet (profiles arrive with ensureProfile). */
+/** Shown when an author has no profile document (for example, an account from before ensureProfile). */
 export const UNKNOWN_AUTHOR_NAME = 'Roami user';
 
 /**
