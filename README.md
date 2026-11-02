@@ -4,147 +4,221 @@ Roami is an iOS app for social travel discovery and planning, aimed at universit
 
 The MVP covers Pike Place Market and nearby downtown Seattle.
 
-## Status (November 1, 2026)
+**Contents:** [Status](#status) · [Prerequisites](#prerequisites) · [Build](#build) · [Test](#test) · [Run](#run) · [Architecture](#architecture) · [Repository layout](#repository-layout) · [Bug tracking](#bug-tracking) · [Team workflow](#team-workflow)
 
-The app runs in Expo Go. Every screen gets its data through one API layer, `callApi`. That layer returns realistic sample data ("fixtures") until a real service replaces each function. Real services read and write Cloud Firestore.
+## Status
+
+_Last updated November 2, 2026._
 
 | Use case | Status |
 |---|---|
-| Create an account, sign in, stay signed in, sign out | **Operational** against Firebase Authentication (or the Auth emulator). A public profile is created on sign-up and sign-in, and profiles are live (`ensureProfile`, `getProfile`, `updateProfile`). No profile screen yet. |
-| Discover places that match an interest (search, map) | In progress. Search, the place list, place details, and the feed are live (`searchRecommendations`, `listPlaces`, `getPlace`, `getFeed`). Search matches tags and written text, including synonyms and prefixes, skips negations such as "no longer has jazz", and explains each match. No search or map screen yet. |
-| Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. A recommendation removed later shows as unavailable without affecting the save. No saved places screen yet. |
+| Create an account, sign in, stay signed in, sign out | **Operational.** Signing up also creates the user's public profile in Firestore (`ensureProfile`, `getProfile`, `updateProfile`). |
+| Discover places that match an interest (search, map) | In progress. The data layer is live: search, the place list, place details, and the feed (`searchRecommendations`, `listPlaces`, `getPlace`, `getFeed`). Search matches tags and written text, including synonyms and prefixes, skips negations such as "no longer has jazz", and explains each match. No search or map screen yet. |
+| Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. No saved places screen yet. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
-| Share a recommendation collection | Not started |
+| Share a recommendation collection | Not started. |
 | Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
 
-The only screens so far are sign-in/sign-up and a temporary developer screen (`mobile/src/dev/PlacesCheck.tsx`). Its "Run backend check" button runs the live profile, place, feed, search, saved place, and trip calls and shows PASS or FAIL for each step.
+**The operational use case touches every major component.** Signing up goes from the sign-up screen to Firebase Authentication, then through the API layer (`callApi('ensureProfile')`) to a service, a repository, and Cloud Firestore, where the security rules check the write.
 
-## Architecture: no Cloud Functions (decided October 2026)
+**To see the rest of the backend working,** sign in and tap **Run backend check** on the home screen. It runs every live call (profiles, places, feed, search, saved places, and trips) through the same API layer the screens use, and shows PASS or FAIL for each step. 19 of the 20 API calls are live. The exception, `createRecommendation`, still returns sample data.
 
-Roami's backend logic runs inside the app. The app talks to Firebase Authentication and Cloud Firestore directly. There is no server.
+## Prerequisites
 
-**Why.** The budget is $0, and the app has to keep working after the demo without anyone's laptop running a backend. Deploying Cloud Functions requires Firebase's paid Blaze plan. Authentication and Firestore have free quotas on the Spark plan that are well above what we need: about 50,000 reads and 20,000 writes per day, 1 GiB of storage, and 50,000 monthly active users.
+| Tool | Needed for | Check |
+|---|---|---|
+| [Node.js](https://nodejs.org) 20 or newer (LTS) | Everything | `node -v` |
+| Git | Getting the code | `git --version` |
+| Java 21 or newer | The Firebase emulators (running the app locally, rules tests) | `java -version` |
+| A Mac with Xcode, **or** an iPhone with [Expo Go](https://apps.apple.com/app/expo-go/id982107779) (latest version) | Running the app | |
 
-**How a request flows.**
+The Firebase CLI doesn't need a global install: the commands below run it with `npx firebase-tools`. A Firebase account is not needed to build, test, or run the app locally.
+
+Get the code:
+
+```bash
+git clone https://github.com/penacoat/Roami.git
+cd Roami
+```
+
+## Build
+
+Expo bundles the app when it runs, so there is no separate compile step for the app. These commands install the dependencies and check that everything compiles. Run them from the repository root:
+
+```bash
+npm --prefix mobile ci            # install the app's dependencies
+npm --prefix mobile run typecheck # compile-check the app (TypeScript)
+npm --prefix backend ci           # install the emulator tools, seed script, and rules tests
+npm --prefix backend run build    # compile the seed script
+```
+
+## Test
+
+**App tests** (no setup or Firebase account needed). These run the real services against an in-memory database that imitates the security rules:
+
+```bash
+npm --prefix mobile test
+```
+
+**Lint, formatting, and type checks:**
+
+```bash
+npm --prefix mobile run lint
+npm --prefix mobile run format:check
+npm --prefix mobile run typecheck
+```
+
+**Security rules tests** (65 tests, run against the Firestore emulator; needs Java 21). Stop any running emulators first, because these need port 8080:
+
+```bash
+npx firebase-tools emulators:exec --only firestore "npm --prefix backend run test:rules"
+```
+
+**Continuous integration.** GitHub Actions (`.github/workflows/mobile-ci.yml`) runs lint, the formatting check, the typecheck, and the app tests on every pull request to `main` and every push to `main`. The rules tests are run locally.
+
+## Run
+
+The app runs in Expo Go against the **Firebase emulators** on your computer. This needs no Firebase account or keys, and uses sample data that a seed script loads.
+
+**1. Start the emulators.** After the [Build](#build) steps, in a terminal at the repository root (leave it running):
+
+```bash
+npx firebase-tools emulators:start
+```
+
+Wait for "All emulators ready." The Emulator UI is at http://127.0.0.1:4000. Warnings about apphosting, hosting, pubsub, and other emulators not running are expected.
+
+**2. Load the sample data.** In a second terminal at the repository root (rerun after every emulator restart):
+
+```bash
+npm --prefix backend run seed
+```
+
+It prints `Seeded 2 users, 7 places, 8 recommendations.`
+
+**3. Point the app at the emulators.** Create a file named `mobile/.env` with these four lines:
+
+```
+EXPO_PUBLIC_FIREBASE_API_KEY=demo-api-key
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=roami-7c0bd
+EXPO_PUBLIC_API_MODE=live
+EXPO_PUBLIC_EMULATOR_HOST=127.0.0.1
+```
+
+The API key can be any text, because the emulators don't check it. Keep the project ID as shown, because the emulators and seed data use it.
+
+- **On the iOS Simulator** (Mac with Xcode), keep `127.0.0.1`.
+- **On an iPhone,** replace `127.0.0.1` with your computer's address on the network, from `ipconfig getifaddr en0`. The phone and computer must be on the same Wi-Fi.
+
+**4. Start the app.** In a third terminal:
+
+```bash
+cd mobile
+npx expo start --clear
+```
+
+Press `i` to open the iOS Simulator, or scan the QR code with an iPhone's Camera app to open the app in Expo Go.
+
+**5. Use it.** Tap **New to Roami? Create an account**, then sign up with any name, any email, and a password of 6 or more characters. The account is created in the Auth emulator, and appears in the Emulator UI under Authentication. On the home screen:
+
+- **Load places** lists the sample places from Firestore.
+- **Run backend check** runs every live API call and shows PASS or FAIL for each. All steps should pass.
+
+### Troubleshooting
+
+| What you see | Fix |
+|---|---|
+| A spinner for about 8 seconds, then the sign-in screen, or "Network error" on sign-up | The app can't reach the emulators. Check that they're running and that `EXPO_PUBLIC_EMULATOR_HOST` matches `ipconfig getifaddr en0` (it changes when you switch Wi-Fi). Then restart with `npx expo start --clear` and fully close Expo Go. |
+| "API mode: fixtures" on the home screen | `mobile/.env` wasn't picked up. Check it's in the `mobile/` folder, then restart with `npx expo start --clear`. |
+| "Need at least 3 places" in the backend check, or 0 places | The emulators restarted and lost the sample data. Rerun step 2. |
+| "Port already in use" when starting the emulators | Another copy is still running. Stop it with Ctrl+C in its terminal. |
+| The app doesn't load at all on an iPhone | Some networks block devices from reaching each other. Connect the computer to the phone's Personal Hotspot and use the new address from `ipconfig getifaddr en0`. |
+
+### Team members: using the real Firebase project
+
+To run against the team's Firebase project instead of the emulators, copy `mobile/.env.example` to `mobile/.env`, and fill in the Firebase values from the living document. Leave `EXPO_PUBLIC_EMULATOR_HOST` empty. Never commit `.env`. With `EXPO_PUBLIC_API_MODE` empty, every call returns sample data ("fixtures"), which is useful for building screens.
+
+## Architecture
+
+Roami's backend logic runs inside the app, and the app talks to Firebase Authentication and Cloud Firestore directly. There is no server and no Cloud Functions: the budget is $0, deploying Cloud Functions needs Firebase's paid Blaze plan, and Authentication and Firestore are free at our size (decided October 2026).
+
+Every request follows the same path:
 
 ```
 Screen → callApi('name', request) → service → repository → Firestore
 ```
 
 - **Screens** call only `callApi`. They never import Firebase.
-- **Services** (`mobile/src/services/`) check the request, call repositories and pure logic, and return the response type from the contract. They throw `ApiError` with a code (`invalid-argument`, `not-found`, `aborted`, ...).
+- **`callApi`** (`mobile/src/api/`) checks every call against the contract. In live mode it runs the real service; functions without one yet return sample data.
+- **Services** (`mobile/src/services/`) check the request, call repositories and pure logic, and return the contract's response type. They throw `ApiError` with a code such as `invalid-argument`, `not-found`, or `aborted`.
 - **Repositories** (`mobile/src/repositories/`) are the only code that reads or writes Firestore.
-- **Pure logic** (`mobile/src/logic/`, created with the first piece) holds search matching, the itinerary planner, and validators. Plain data in, plain data out, no Firebase imports.
-- **The contract** (`shared/src/api.ts`, `views.ts`, `models.ts`) defines every call's request and response, and every Firestore document.
+- **Pure logic** (`mobile/src/logic/`) holds search matching and trip validation. Plain data in, plain data out, no Firebase.
+- **The contract** (`shared/src/`) defines every call's request and response, and every Firestore document, as TypeScript types.
 - **`firestore.rules`** is the only server-side enforcement. It checks identity, ownership, document IDs, field shapes, and that each trip change raises the trip's `revision` by exactly one.
+
+ESLint enforces these layers (see [docs/coding-guidelines.md](docs/coding-guidelines.md)).
 
 **Trade-offs we accepted.**
 
-- **Some checks live only in the app.** The rules cannot run the planner, count stops per day, or check that a stop's place exists, so a modified app could skip those checks.
-- **Nothing in the app is secret.** Anything shipped in the app can be read. Only use API keys we are comfortable exposing, or fetch data ahead of time with an admin script.
-- **Free-tier ceilings.** Search should cache results to stay under the daily read quota.
-- **Moderation is manual.** Reviewing reports and removing content happens through an admin script.
+- **Some checks live only in the app.** The rules can't count stops per day or run the itinerary planner, so a modified app could skip those checks.
+- **Nothing in the app is secret.** Anything shipped in the app can be read, including the Firebase web configuration. Data is protected by the security rules.
+- **Free-tier limits.** Search caches each city's data for 60 seconds to stay under the daily read quota.
+- **Moderation is manual,** through an admin script.
+- **Profiles are public.** Rules can't hide individual fields, so profile documents never hold private data such as email.
 
-**Still open.**
-
-- **App distribution.** Expo Go is free but needs someone's laptop running `npx expo start`. A standalone app through TestFlight needs the paid Apple Developer Program (about $99 per year).
-- **Profile privacy.** Rules cannot hide individual fields, so profile documents must never hold private data such as email. The rules reject an `email` field.
+**Still open:** app distribution. Expo Go is free but needs a computer running `npx expo start`. A standalone app through TestFlight needs the paid Apple Developer Program.
 
 ## Repository layout
 
 ```
 Roami/
 ├── mobile/                      # The iOS app (Expo + React Native + TypeScript)
-│   ├── App.tsx                  # Entry point: sign-in gate, then the app
+│   ├── App.tsx                  # Entry point: sign-in, then the home screen
 │   ├── src/
-│   │   ├── api/                 # callApi, ApiError, fixture data and handlers
-│   │   ├── services/            # One file per component's logic (places, trips, stop revisions)
+│   │   ├── api/                 # callApi, ApiError, sample data
+│   │   ├── services/            # Logic for each component (profiles, places, search, saves, trips)
 │   │   ├── repositories/        # Firestore reads and writes
-│   │   ├── logic/               # Pure code with no Firebase (search matching, trip validation, stop ordering)
-│   │   ├── auth/                # AuthService, AuthProvider, AuthScreens, Firebase setup
-│   │   └── dev/                 # Temporary developer checks (PlacesCheck)
-│   ├── __tests__/               # Jest tests for the app
-│   └── .env.example             # Environment variables the app needs
+│   │   ├── logic/               # Pure code with no Firebase (search matching, trip validation)
+│   │   ├── auth/                # Sign-in: AuthService, AuthProvider, AuthScreens
+│   │   └── dev/                 # Temporary developer screen (Load places, Run backend check)
+│   ├── __tests__/               # Jest tests
+│   ├── test-utils/              # In-memory Firestore for tests, following the security rules
+│   └── .env.example             # Environment variables
 ├── shared/src/                  # The contract: api.ts, views.ts, models.ts (types only)
-├── backend/                     # Not a server: rules tests, seed script, leftover placeholder function
-│   ├── test/                    # Security rules tests (run against the Firestore emulator)
+├── backend/                     # Not a server: rules tests and the seed script
+│   ├── test/                    # Security rules tests
 │   └── src/scripts/seed.ts      # Loads sample data into the emulator
-├── docs/                        # Setup and developer guides
+├── docs/                        # Developer guides
 ├── firestore.rules              # Security rules
 ├── firestore.indexes.json       # Firestore indexes
 ├── firebase.json                # Firebase and emulator configuration
-└── .github/workflows/           # CI (runs the mobile tests)
+└── .github/workflows/           # CI
 ```
 
-`backend/` keeps its name for now, but do not add Cloud Functions to it. `backend/src/index.ts` holds an unused `healthCheck` placeholder.
+`backend/src/index.ts` holds an unused `healthCheck` placeholder from before the Cloud Functions decision. Don't add Cloud Functions to it.
 
-## Getting started
+## Bug tracking
 
-You need a Mac, an iPhone, Node 20 or newer, and Git.
+Bugs are tracked in [GitHub Issues](https://github.com/penacoat/Roami/issues). Each bug report includes:
 
-1. Install **Expo Go** on your iPhone (latest version; the project uses Expo SDK 58) and create a free Expo account.
-2. Clone the repo and install the app's dependencies:
+- **Steps to reproduce** the bug
+- **Expected and actual behavior**
+- **Labels** for severity (critical to minor) and area (frontend or backend)
 
-   ```bash
-   git clone https://github.com/penacoat/Roami.git
-   cd Roami/mobile
-   npm install
-   ```
-
-3. Copy `mobile/.env.example` to `mobile/.env` and fill in the Firebase values (ask the team or see the living document). Never commit `.env`.
-4. Start the app and scan the QR code with your iPhone camera:
-
-   ```bash
-   npx expo start
-   ```
-
-With `EXPO_PUBLIC_API_MODE` left empty, every API call returns sample data, so no backend setup is needed to build screens. Full setup steps and troubleshooting are in [docs/mobile-app-setup.md](docs/mobile-app-setup.md) and [docs/firebase-setup.md](docs/firebase-setup.md).
-
-## Working on the data layer (emulators)
-
-Backend work runs against the **Firebase emulators**, so nothing touches real data. You also need Java 21 or newer and the Firebase CLI. Install the backend tools once with `npm --prefix backend install`.
-
-Use three terminal tabs from the repo root:
-
-| Tab | Command | Notes |
-|---|---|---|
-| 1 | `firebase emulators:start` | Leave running. Emulator UI at http://127.0.0.1:4000 |
-| 2 | `npm --prefix backend run seed` | Loads sample places and recommendations. Rerun after every emulator restart. |
-| 3 | `cd mobile && npx expo start --clear` | Leave running. |
-
-To use real services instead of fixtures, add these lines to `mobile/.env` and restart Expo with `--clear`:
-
-```
-EXPO_PUBLIC_API_MODE=live
-EXPO_PUBLIC_EMULATOR_HOST=<your laptop's address>
-```
-
-Find your address with `ipconfig getifaddr en0`. It changes when you switch Wi-Fi networks, and your phone and laptop must be on the same network. In live mode, sign-in goes to the Auth emulator, so create a new test account there.
-
-Functions with no real service yet still use fixtures, so fixtures can be replaced one at a time. [docs/where-code-goes.md](docs/where-code-goes.md) explains how, using `PlaceRepository.ts` and `PlaceService.ts` as the example.
-
-## Running tests
-
-```bash
-# App tests (Jest + jest-expo); these also run in CI on every pull request
-npm --prefix mobile test
-
-# Security rules tests (65 tests). Stop any running emulators first; they need port 8080.
-firebase emulators:exec --only firestore "npm --prefix backend run test:rules"
-```
-
-CI (`.github/workflows/mobile-ci.yml`) runs only the app tests. The rules tests are run locally.
+The pull request that fixes a bug says which bug it fixes, for example `Fixes #12`, so the issue closes when the fix merges.
 
 ## Team workflow
 
-- **Never commit to `main`.** Work on a branch, open a pull request, and get a review.
-- **Branch names:** `<github-username>/<short-description>`, for example `penacoat/place-slice` or `bhelle/trips`.
-- **Changes to `shared/`** get their own small pull request, and the whole team reviews them. Prefer adding fields to renaming or removing them.
+- **Never commit to `main`.** Work on a branch, open a pull request, make sure CI passes, and get a review.
+- **Branch names:** `<github-username>/<short-description>`, for example `bhelle/trips`.
+- **Before opening a pull request,** run `npm run format` and `npm run lint` in `mobile/`.
+- **Changes to `shared/`** get their own small pull request that the whole team reviews. Prefer adding fields to renaming or removing them.
 - **Import shared types with `import type`.** A normal import from `@roami/shared` crashes the app. See [docs/shared-models.md](docs/shared-models.md).
 - **`null` means unknown.** Never turn a missing walking time or opening hours into `0` or "closed."
-- **Never commit** `.env`, service account keys, `node_modules/`, `backend/lib/`, or debug logs. Don't run `npm audit fix --force`.
-- **Style:** Google's TypeScript guide and Airbnb's React guide. See [docs/coding-guidelines.md](docs/coding-guidelines.md).
+- **Never commit** `.env`, service account keys, `node_modules/`, or debug logs. Don't run `npm audit fix --force`.
+
+More guides: [where code goes](docs/where-code-goes.md) (adding a new service), [coding guidelines](docs/coding-guidelines.md), [shared models](docs/shared-models.md).
 
 ## Team
 
