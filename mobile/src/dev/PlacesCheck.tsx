@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ApiError, callApi, getApiMode } from '../api';
+import { runBackendCheck } from './backendCheck';
 
 // Temporary proof-of-life for the data layer. Frontend: replace with real screens.
 export function PlacesCheck() {
@@ -19,11 +20,23 @@ export function PlacesCheck() {
     }
   }
 
+  async function check() {
+    const lines: string[] = [];
+    setText('Running backend check...');
+    await runBackendCheck((line) => {
+      lines.push(`${line.ok ? 'PASS' : 'FAIL'}  ${line.text}`);
+      setText(lines.join('\n'));
+    });
+  }
+
   return (
     <View style={styles.box}>
       <Text style={styles.mode}>API mode: {getApiMode()}</Text>
       <Pressable style={styles.button} onPress={load}>
         <Text style={styles.buttonText}>Load places</Text>
+      </Pressable>
+      <Pressable style={styles.button} onPress={check}>
+        <Text style={styles.buttonText}>Run backend check</Text>
       </Pressable>
       <ScrollView style={styles.scroll}>
         <Text style={styles.result}>{text}</Text>
@@ -33,7 +46,7 @@ export function PlacesCheck() {
 }
 
 const styles = StyleSheet.create({
-  box: { width: '100%', maxHeight: 360, padding: 16 },
+  box: { width: '100%', maxHeight: 460, padding: 16 },
   mode: { fontSize: 14, color: '#555', marginBottom: 8, textAlign: 'center' },
   button: {
     backgroundColor: '#1a73e8',

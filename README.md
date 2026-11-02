@@ -18,7 +18,7 @@ The app runs in Expo Go. Every screen gets its data through one API layer, `call
 | Share a recommendation collection | Not started |
 | Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
 
-The only screens so far are sign-in/sign-up and a temporary "Load places" check (`mobile/src/dev/PlacesCheck.tsx`) that proves the data layer works.
+The only screens so far are sign-in/sign-up and a temporary developer screen (`mobile/src/dev/PlacesCheck.tsx`). Its "Run backend check" button runs the live place, feed, and trip calls and shows PASS or FAIL for each step.
 
 ## Architecture: no Cloud Functions (decided October 2026)
 
