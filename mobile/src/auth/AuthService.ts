@@ -70,6 +70,11 @@ export async function signOut(): Promise<void> {
   await firebaseSignOut(auth);
 }
 
+/** The signed-in user's ID, or null when nobody is signed in. Services use this for ownership. */
+export function getCurrentUserId(): string | null {
+  return auth.currentUser?.uid ?? null;
+}
+
 /** Calls the callback now and whenever the user signs in or out. Returns an unsubscribe function. */
 export function subscribeToAuthChanges(callback: (user: AuthUser | null) => void): () => void {
   return onAuthStateChanged(auth, (user) => callback(user ? toAuthUser(user) : null));
