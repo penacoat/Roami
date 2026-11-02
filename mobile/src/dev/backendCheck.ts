@@ -1,4 +1,4 @@
-// Temporary developer check: runs every live profile, search, trip, map, and feed call through
+// Temporary developer check: runs every live profile, search, save, trip, map, and feed call through
 // callApi, the same way screens will, and reports each step. In live mode this
 // exercises the real services against Firestore and its security rules. It creates
 // a test trip each time it runs, so use it against the emulator only.
@@ -65,7 +65,7 @@ export async function runBackendCheck(
     if (places.length < 3) throw new Error('Need at least 3 places. Run the seed script.');
     const [first, second, third] = places;
 
-    await step(
+    const placeDetails = await step(
       'getPlace',
       () => callApi('getPlace', { placeId: first.id }),
       (r) => `${r.place.name}, ${r.recommendations.length} recommendations`,
@@ -84,6 +84,41 @@ export async function runBackendCheck(
         const why = first ? `, first matched "${first.matched}" (${first.kind})` : '';
         return `${exact} exact, ${r.results.length - exact} broader${why}`;
       },
+    );
+
+    const recommendationId = placeDetails.recommendations[0]?.id;
+    await step(
+      'savePlace',
+      () => callApi('savePlace', { placeId: first.id, recommendationId }),
+      (r) => `${r.saved.place.name}, ${r.saved.recommendations.length} recommendation`,
+    );
+    await step(
+      'savePlace again',
+      () => callApi('savePlace', { placeId: first.id, recommendationId }),
+      (r) => {
+        if (r.saved.recommendations.length > 1) throw new Error('A source was added twice.');
+        return 'same entry, no duplicate';
+      },
+    );
+    await step(
+      'updateSavedNote',
+      () => callApi('updateSavedNote', { placeId: first.id, personalNote: 'Backend check' }),
+      (r) => `note "${r.saved.personalNote}"`,
+    );
+    await step(
+      'listSavedPlaces',
+      () => callApi('listSavedPlaces', {}),
+      (r) => {
+        const entries = r.saved.filter((s) => s.place.id === first.id);
+        if (entries.length !== 1) throw new Error(`Expected 1 entry, found ${entries.length}.`);
+        if (entries[0].personalNote !== 'Backend check') throw new Error('The note was lost.');
+        return `${r.saved.length} saved, note kept`;
+      },
+    );
+    await step(
+      'removeSavedPlace',
+      () => callApi('removeSavedPlace', { placeId: first.id }),
+      () => 'removed',
     );
 
     let { trip } = await step(
