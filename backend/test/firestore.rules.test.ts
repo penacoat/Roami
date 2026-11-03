@@ -124,6 +124,98 @@ const seed = (path: string, data: Record<string, unknown>) =>
     await setDoc(doc(ctx.firestore(), path), data);
   });
 
+const recommendation = (id: string, authorId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  authorId,
+  placeId: "p1",
+  description: "A great place to visit.",
+  tags: ["coffee"],
+  visitDate: null,
+  sourceLinks: [],
+  moderationStatus: "active",
+  createdAt: now,
+  ...overrides,
+});
+
+describe("recommendation writes", () => {
+  it("lets a signed-in user create an active recommendation for an existing place", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "recommendations/rec1"), recommendation("rec1", "alice")),
+    );
+  });
+
+  it("blocks signed-out users and users writing as someone else", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await assertFails(
+      setDoc(
+        doc(env.unauthenticatedContext().firestore(), "recommendations/rec1"),
+        recommendation("rec1", "alice"),
+      ),
+    );
+    await assertFails(
+      setDoc(doc(as("bob"), "recommendations/rec1"), recommendation("rec1", "alice")),
+    );
+  });
+
+  it("requires an existing place and a nonempty description", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "recommendations/missingPlace"),
+        recommendation("missingPlace", "alice", {placeId: "missing"}),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "recommendations/emptyDescription"),
+        recommendation("emptyDescription", "alice", {description: ""}),
+      ),
+    );
+  });
+
+  it("blocks extra fields and client-selected non-active moderation states", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "recommendations/extraField"),
+        {...recommendation("extraField", "alice"), isFeatured: true},
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "recommendations/hidden"),
+        recommendation("hidden", "alice", {moderationStatus: "hidden"}),
+      ),
+    );
+  });
+
+  it("lets the author edit content but not identity, place, or moderation status", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await seed("places/p2", {name: "Park"});
+    await seed("recommendations/rec1", recommendation("rec1", "alice"));
+    const ref = doc(as("alice"), "recommendations/rec1");
+
+    await assertSucceeds(updateDoc(ref, {description: "Visit in the morning."}));
+    await assertFails(updateDoc(ref, {authorId: "bob"}));
+    await assertFails(updateDoc(ref, {placeId: "p2"}));
+    await assertFails(updateDoc(ref, {moderationStatus: "removed"}));
+  });
+
+  it("blocks another user from editing or deleting a recommendation", async () => {
+    await seed("recommendations/rec1", recommendation("rec1", "alice"));
+    const ref = doc(as("bob"), "recommendations/rec1");
+
+    await assertFails(updateDoc(ref, {description: "Changed"}));
+    await assertFails(deleteDoc(ref));
+  });
+
+  it("lets the author delete their recommendation", async () => {
+    await seed("recommendations/rec1", recommendation("rec1", "alice"));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "recommendations/rec1")));
+  });
+});
+
 describe("profiles", () => {
   it("lets a user create their own profile", async () => {
     await assertSucceeds(setDoc(doc(as("alice"), "users/alice"), profile("alice")));
@@ -395,5 +487,412 @@ describe("queries the app will run", () => {
   });
   it("blocks listing recommendations without the active filter", async () => {
     await assertFails(getDocs(collection(as("bob"), "recommendations")));
+  });
+});
+
+const comment = (id: string, authorId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  authorId,
+  targetType: "place",
+  targetId: "p1",
+  text: "A useful detail.",
+  parentCommentId: null,
+  isQuestion: false,
+  replyPlaceId: null,
+  moderationStatus: "active",
+  createdAt: now,
+  ...overrides,
+});
+
+const collectionData = (id: string, ownerId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  ownerId,
+  title: "Coffee stops",
+  placeIds: ["p1"],
+  recommendationIds: ["recActive"],
+  isPublished: false,
+  createdAt: now,
+  ...overrides,
+});
+
+const visit = (id: string, userId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  userId,
+  placeId: "p1",
+  visitDate: "2026-10-30",
+  ...overrides,
+});
+
+const ranking = (id: string, userId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  userId,
+  category: "coffee",
+  placeIds: ["p1"],
+  ...overrides,
+});
+
+const preparationTask = (id: string, tripStopId: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  tripStopId,
+  title: "Book a table",
+  bookingUrl: "https://example.com/booking",
+  source: "Restaurant website",
+  deadline: "2026-11-01",
+  needsReview: false,
+  ...overrides,
+});
+
+describe("comments", () => {
+  it("lets a signed-in author comment on an existing place or active recommendation", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await seed("comments/parent", comment("parent", "bob"));
+    await assertSucceeds(setDoc(doc(as("alice"), "comments/c1"), comment("c1", "alice")));
+    await assertSucceeds(
+      setDoc(
+        doc(as("alice"), "comments/c2"),
+        comment("c2", "alice", {targetType: "recommendation", targetId: "recActive"}),
+      ),
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(as("alice"), "comments/reply"),
+        comment("reply", "alice", {parentCommentId: "parent"}),
+      ),
+    );
+  });
+
+  it("blocks comments on missing or non-active targets and non-active new comments", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await seed("comments/hiddenParent", comment("hiddenParent", "bob", {moderationStatus: "hidden"}));
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "comments/missing"),
+        comment("missing", "alice", {targetId: "missing-place"}),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "comments/removed"),
+        comment("removed", "alice", {targetType: "recommendation", targetId: "recRemoved"}),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "comments/hidden"),
+        comment("hidden", "alice", {moderationStatus: "hidden"}),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "comments/replyHidden"),
+        comment("replyHidden", "alice", {parentCommentId: "hiddenParent"}),
+      ),
+    );
+  });
+
+  it("lets an author edit or delete their comment without changing its identity or moderation", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await seed("comments/c1", comment("c1", "alice"));
+    const ref = doc(as("alice"), "comments/c1");
+
+    await assertSucceeds(updateDoc(ref, {text: "Updated detail."}));
+    await assertFails(updateDoc(ref, {authorId: "bob"}));
+    await assertFails(updateDoc(ref, {targetId: "p2"}));
+    await assertFails(updateDoc(ref, {moderationStatus: "removed"}));
+    await assertSucceeds(deleteDoc(ref));
+  });
+
+  it("blocks another author, empty text, and extra fields", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await seed("comments/c1", comment("c1", "alice"));
+    await assertFails(updateDoc(doc(as("bob"), "comments/c1"), {text: "Changed"}));
+    await assertFails(deleteDoc(doc(as("bob"), "comments/c1")));
+    await assertFails(
+      setDoc(doc(as("alice"), "comments/empty"), comment("empty", "alice", {text: ""})),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "comments/extra"),
+        {...comment("extra", "alice"), isAdmin: true},
+      ),
+    );
+  });
+});
+
+describe("likes", () => {
+  it("lets a user create and remove their own like on an active recommendation", async () => {
+    const data = {userId: "bob", recommendationId: "recActive", createdAt: now};
+    await assertSucceeds(setDoc(doc(as("bob"), "likes/like1"), data));
+    await assertSucceeds(deleteDoc(doc(as("bob"), "likes/like1")));
+  });
+
+  it("blocks likes for inactive or missing recommendations and likes as another user", async () => {
+    await assertFails(
+      setDoc(doc(as("bob"), "likes/removed"), {
+        userId: "bob", recommendationId: "recRemoved", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("bob"), "likes/missing"), {
+        userId: "bob", recommendationId: "missing", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("bob"), "likes/forAlice"), {
+        userId: "alice", recommendationId: "recActive", createdAt: now,
+      }),
+    );
+  });
+
+  it("does not allow updating a like or removing another user's like", async () => {
+    await seed("likes/like1", {
+      userId: "alice", recommendationId: "recActive", createdAt: now,
+    });
+    await assertFails(updateDoc(doc(as("alice"), "likes/like1"), {createdAt: now}));
+    await assertFails(deleteDoc(doc(as("bob"), "likes/like1")));
+  });
+});
+
+describe("follows", () => {
+  it("lets a user follow and unfollow another user", async () => {
+    await seed("users/bob", {id: "bob"});
+    const data = {followerId: "alice", followeeId: "bob", createdAt: now};
+    await assertSucceeds(setDoc(doc(as("alice"), "follows/f1"), data));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "follows/f1")));
+  });
+
+  it("blocks self-follows and creating a follow for someone else", async () => {
+    await assertFails(
+      setDoc(doc(as("alice"), "follows/self"), {
+        followerId: "alice", followeeId: "alice", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "follows/forBob"), {
+        followerId: "bob", followeeId: "alice", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "follows/missingUser"), {
+        followerId: "alice", followeeId: "missing", createdAt: now,
+      }),
+    );
+  });
+
+  it("does not allow follow updates or unfollowing on another user's behalf", async () => {
+    await seed("follows/f1", {followerId: "alice", followeeId: "bob", createdAt: now});
+    await assertFails(updateDoc(doc(as("alice"), "follows/f1"), {followeeId: "carol"}));
+    await assertFails(deleteDoc(doc(as("bob"), "follows/f1")));
+  });
+});
+
+describe("collections", () => {
+  it("lets an owner create, update, and delete their collection", async () => {
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "collections/c1"), collectionData("c1", "alice")),
+    );
+    await assertSucceeds(updateDoc(doc(as("alice"), "collections/c1"), {title: "Coffee and tea"}));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "collections/c1")));
+  });
+
+  it("blocks another owner, owner changes, and invalid collection fields", async () => {
+    await seed("collections/c1", collectionData("c1", "alice"));
+    await assertFails(updateDoc(doc(as("bob"), "collections/c1"), {title: "Stolen"}));
+    await assertFails(deleteDoc(doc(as("bob"), "collections/c1")));
+    await assertFails(updateDoc(doc(as("alice"), "collections/c1"), {ownerId: "bob"}));
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "collections/extra"),
+        {...collectionData("extra", "alice"), private: true},
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "collections/badList"),
+        collectionData("badList", "alice", {placeIds: "p1"}),
+      ),
+    );
+  });
+});
+
+describe("visits", () => {
+  it("lets a user create, update, and delete their visit for an existing place", async () => {
+    await seed("places/p1", {name: "Cafe"});
+    await assertSucceeds(setDoc(doc(as("alice"), "visits/v1"), visit("v1", "alice")));
+    await assertSucceeds(updateDoc(doc(as("alice"), "visits/v1"), {visitDate: "2026-11-01"}));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "visits/v1")));
+  });
+
+  it("blocks visits for missing places, mismatched owners or IDs, and extra fields", async () => {
+    await assertFails(
+      setDoc(doc(as("alice"), "visits/missing"), visit("missing", "alice", {placeId: "missing"})),
+    );
+    await seed("places/p1", {name: "Cafe"});
+    await assertFails(
+      setDoc(doc(as("bob"), "visits/forAlice"), visit("forAlice", "alice")),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "visits/wrongId"), visit("different", "alice")),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "visits/extra"),
+        {...visit("extra", "alice"), notes: "private"},
+      ),
+    );
+  });
+
+  it("blocks another user from editing or deleting a visit", async () => {
+    await seed("visits/v1", visit("v1", "alice"));
+    await assertFails(updateDoc(doc(as("bob"), "visits/v1"), {visitDate: "2026-11-01"}));
+    await assertFails(deleteDoc(doc(as("bob"), "visits/v1")));
+  });
+});
+
+describe("rankings", () => {
+  it("lets an owner create, update, and delete a ranking with its documented ID", async () => {
+    const id = "alice_coffee";
+    await assertSucceeds(setDoc(doc(as("alice"), `rankings/${id}`), ranking(id, "alice")));
+    await assertSucceeds(updateDoc(doc(as("alice"), `rankings/${id}`), {placeIds: ["p2", "p1"]}));
+    await assertSucceeds(deleteDoc(doc(as("alice"), `rankings/${id}`)));
+  });
+
+  it("blocks mismatched owners, IDs, and invalid ranking lists", async () => {
+    await assertFails(
+      setDoc(doc(as("bob"), "rankings/alice_coffee"), ranking("alice_coffee", "alice")),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "rankings/wrong"), ranking("wrong", "alice")),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "rankings/alice_coffee"),
+        ranking("alice_coffee", "alice", {placeIds: "p1"}),
+      ),
+    );
+  });
+
+  it("blocks another user from editing or deleting a ranking", async () => {
+    await seed("rankings/alice_coffee", ranking("alice_coffee", "alice"));
+    await assertFails(
+      updateDoc(doc(as("bob"), "rankings/alice_coffee"), {placeIds: ["p2"]}),
+    );
+    await assertFails(deleteDoc(doc(as("bob"), "rankings/alice_coffee")));
+  });
+});
+
+describe("blocks", () => {
+  it("lets a user create and remove their own block", async () => {
+    await seed("users/bob", {id: "bob"});
+    const data = {userId: "alice", blockedUserId: "bob", createdAt: now};
+    await assertSucceeds(setDoc(doc(as("alice"), "blocks/new"), data));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "blocks/new")));
+  });
+
+  it("blocks self-blocks, mismatched users, and extra fields", async () => {
+    await assertFails(
+      setDoc(doc(as("alice"), "blocks/self"), {
+        userId: "alice", blockedUserId: "alice", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "blocks/forBob"), {
+        userId: "bob", blockedUserId: "alice", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "blocks/missingUser"), {
+        userId: "alice", blockedUserId: "missing", createdAt: now,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as("alice"), "blocks/extra"), {
+        userId: "alice", blockedUserId: "bob", createdAt: now, reason: "spam",
+      }),
+    );
+  });
+
+  it("does not allow updating a block or removing another user's block", async () => {
+    await seed("blocks/alice_bob", {
+      userId: "alice", blockedUserId: "bob", createdAt: now,
+    });
+    await assertFails(updateDoc(doc(as("alice"), "blocks/alice_bob"), {blockedUserId: "carol"}));
+    await assertFails(deleteDoc(doc(as("bob"), "blocks/alice_bob")));
+  });
+});
+
+describe("preparation task writes are trip-owner-only", () => {
+  it("lets the trip owner create, update, and delete a task on the owner's stop", async () => {
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "preparationTasks/task2"), preparationTask("task2", "stop1")),
+    );
+    await assertSucceeds(
+      updateDoc(doc(as("alice"), "preparationTasks/task2"), {title: "Confirm reservation"}),
+    );
+    await assertSucceeds(deleteDoc(doc(as("alice"), "preparationTasks/task2")));
+  });
+
+  it("blocks shared viewers, missing stops, moved tasks, and extra fields", async () => {
+    await assertFails(
+      setDoc(
+        doc(as("bob"), "preparationTasks/task2"),
+        preparationTask("task2", "stop1"),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "preparationTasks/missingStop"),
+        preparationTask("missingStop", "missing"),
+      ),
+    );
+    await seed("preparationTasks/task2", preparationTask("task2", "stop1"));
+    await assertFails(
+      updateDoc(doc(as("alice"), "preparationTasks/task2"), {tripStopId: "stop2"}),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "preparationTasks/extra"),
+        {...preparationTask("extra", "stop1"), cost: 50},
+      ),
+    );
+  });
+});
+
+describe("Task 8 read policies", () => {
+  beforeEach(async () => {
+    await seed("comments/active", comment("active", "alice"));
+    await seed("comments/hidden", comment("hidden", "alice", {moderationStatus: "hidden"}));
+    await seed("collections/public", collectionData("public", "alice", {isPublished: true}));
+    await seed("collections/private", collectionData("private", "alice"));
+    await seed("visits/v1", visit("v1", "alice"));
+    await seed("rankings/alice_coffee", ranking("alice_coffee", "alice"));
+    await seed("likes/alice_like", {
+      userId: "alice", recommendationId: "recActive", createdAt: now,
+    });
+    await seed("follows/f1", {followerId: "alice", followeeId: "bob", createdAt: now});
+  });
+
+  it("keeps comments moderation-aware and collections private unless published", async () => {
+    await assertSucceeds(getDoc(doc(as("bob"), "comments/active")));
+    await assertFails(getDoc(doc(as("bob"), "comments/hidden")));
+    await assertSucceeds(getDoc(doc(as("alice"), "comments/hidden")));
+    await assertSucceeds(getDoc(doc(as("bob"), "collections/public")));
+    await assertFails(getDoc(doc(as("bob"), "collections/private")));
+    await assertSucceeds(getDoc(doc(as("alice"), "collections/private")));
+  });
+
+  it("keeps visits, rankings, and likes owner-only", async () => {
+    await assertSucceeds(getDoc(doc(as("alice"), "visits/v1")));
+    await assertFails(getDoc(doc(as("bob"), "visits/v1")));
+    await assertSucceeds(getDoc(doc(as("alice"), "rankings/alice_coffee")));
+    await assertFails(getDoc(doc(as("bob"), "rankings/alice_coffee")));
+    await assertSucceeds(getDoc(doc(as("alice"), "likes/alice_like")));
+    await assertFails(getDoc(doc(as("bob"), "likes/alice_like")));
+  });
+
+  it("lets either participant read a follow, but not unrelated users", async () => {
+    await assertSucceeds(getDoc(doc(as("alice"), "follows/f1")));
+    await assertSucceeds(getDoc(doc(as("bob"), "follows/f1")));
+    await assertFails(getDoc(doc(as("carol"), "follows/f1")));
   });
 });

@@ -17,8 +17,8 @@ _Last updated November 2, 2026._
 | Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. No saved places screen yet. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
-| Share a recommendation collection | Not started. |
-| Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
+| Share a recommendation collection | Not started. Rules now support owner-managed collections; the app flow is not wired yet. |
+| Rank and recommend a visited place | Not started. Rules support these records; the app flows are not wired yet. |
 
 **The operational use case touches every major component.** Signing up goes from the sign-up screen to Firebase Authentication, then through the API layer (`callApi('ensureProfile')`) to a service, a repository, and Cloud Firestore, where the security rules check the write.
 
@@ -69,7 +69,7 @@ npm --prefix mobile run format:check
 npm --prefix mobile run typecheck
 ```
 
-**Security rules tests** (65 tests, run against the Firestore emulator; needs Java 21). Stop any running emulators first, because these need port 8080:
+**Security rules tests** (98 tests, run against the Firestore emulator; needs Java 21). Stop any running emulators first, because these need port 8080:
 
 ```bash
 npx firebase-tools emulators:exec --only firestore "npm --prefix backend run test:rules"
