@@ -28,10 +28,12 @@ _Explore branch update November 3, 2026; native map validation is pending._
 
 | Tool | Needed for | Check |
 |---|---|---|
-| [Node.js](https://nodejs.org) 24 (LTS; 24.3 or newer) | Everything; required by the current Expo/React Native versions | `node -v` |
+| [Node.js](https://nodejs.org) 24.12 or newer within 24.x (recommended; tested with 24.22.2) | Build, test, and run; CI uses Node 24 | `node -v` |
 | Git | Getting the code | `git --version` |
 | Java 21 or newer | The Firebase emulators (running the app locally, rules tests) | `java -version` |
 | A Mac with Xcode, **or** an iPhone with [Expo Go](https://apps.apple.com/app/expo-go/id982107779) (latest version) | Running the app | |
+
+Expo and React Native accept Node 22.13+ within 22.x, 24.3+ within 24.x, or 26+. The locked Firebase packages additionally require Node 24.12+, and `backend/package.json` declares Node 24. Together these constraints require Node 24.x at 24.12 or newer for the full project. This branch does not include an `.nvmrc`.
 
 The Firebase CLI doesn't need a global install: the commands below run it with `npx firebase-tools`. A Firebase account is not needed to build, test, or run the app locally.
 
