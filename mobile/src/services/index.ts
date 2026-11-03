@@ -3,6 +3,7 @@ import { registerLiveHandlers } from '../api';
 import { getFeed } from './DiscoveryService';
 import { getPlace, listPlaces } from './PlaceService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
+import { createRecommendation } from './RecommendationService';
 import { addStop, moveStop, removeStop } from './RevisionService';
 import { listSavedPlaces, removeSavedPlace, savePlace, updateSavedNote } from './SaveService';
 import { searchRecommendations } from './SearchService';
@@ -22,6 +23,7 @@ export function registerServices(): void {
     getPlace,
     getFeed,
     searchRecommendations,
+    createRecommendation,
     savePlace,
     listSavedPlaces,
     updateSavedNote,

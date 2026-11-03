@@ -18,11 +18,11 @@ _Last updated November 2, 2026._
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
 | Share a recommendation collection | Not started. Rules now support owner-managed collections; the app flow is not wired yet. |
-| Rank and recommend a visited place | Not started. Rules support these records; the app flows are not wired yet. |
+| Rank and recommend a visited place | In progress. `createRecommendation` now writes through the live API; visit/ranking flows and contribution UI are not wired yet. |
 
 **The operational use case touches every major component.** Signing up goes from the sign-up screen to Firebase Authentication, then through the API layer (`callApi('ensureProfile')`) to a service, a repository, and Cloud Firestore, where the security rules check the write.
 
-**To see the rest of the backend working,** sign in and tap **Run backend check** on the home screen. It runs every live call (profiles, places, feed, search, saved places, and trips) through the same API layer the screens use, and shows PASS or FAIL for each step. 19 of the 20 API calls are live. The exception, `createRecommendation`, still returns sample data.
+**To see the rest of the backend working,** sign in and tap **Run backend check** on the home screen. It exercises profiles, places, feed, search, saved places, and trips through the same API layer the screens use, and shows PASS or FAIL for each step. All 20 API calls now have live handlers, including `createRecommendation`; there is not yet a contribution screen or backend-check step for creating recommendations.
 
 ## Prerequisites
 
@@ -69,10 +69,10 @@ npm --prefix mobile run format:check
 npm --prefix mobile run typecheck
 ```
 
-**Security rules tests** (98 tests, run against the Firestore emulator; needs Java 21). Stop any running emulators first, because these need port 8080:
+**Firestore rules and recommendation integration tests** (101 tests, run against the Firestore and Auth emulators; needs Java 21). Stop any running emulators first, because these need ports 8080 and 9099:
 
 ```bash
-npx firebase-tools emulators:exec --only firestore "npm --prefix backend run test:rules"
+npx firebase-tools emulators:exec --only auth,firestore "npm --prefix backend run test:rules -- --runInBand"
 ```
 
 **Continuous integration.** GitHub Actions (`.github/workflows/mobile-ci.yml`) runs lint, the formatting check, the typecheck, and the app tests on every pull request to `main` and every push to `main`. The rules tests are run locally.
