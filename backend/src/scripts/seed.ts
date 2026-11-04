@@ -1,88 +1,139 @@
-// Loads sample data into the Firestore EMULATOR. Refuses to run against a real project.
-// Sample data only: names are real Seattle places, but hours, descriptions, and
-// authors are made up. Run it with: npm --prefix backend run seed
-import {initializeApp} from "firebase-admin/app";
-import {getFirestore} from "firebase-admin/firestore";
+/**
+ * Loads deterministic demo data into the local Firestore emulator only.
+ * Requires FIRESTORE_EMULATOR_HOST to point to a loopback emulator on port 8080.
+ */
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-if (!process.env.FIRESTORE_EMULATOR_HOST) {
-  throw new Error("FIRESTORE_EMULATOR_HOST is not set. This script only seeds the emulator.");
+import {
+  SEED_CITY,
+  SEED_PLACES,
+  SEED_PROJECT_ID,
+  SEED_RECOMMENDATIONS,
+  SEED_TIMESTAMP,
+  SEED_USERS,
+} from "./seedData";
+
+export function requireFirestoreEmulatorHost(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const host = env.FIRESTORE_EMULATOR_HOST?.trim();
+  if (!host) {
+    throw new Error(
+      "FIRESTORE_EMULATOR_HOST is not set. Start the local Firebase emulator, then run npm --prefix backend run seed.",
+    );
+  }
+
+  if (!/^(localhost|127\.0\.0\.1):8080$|^\[::1\]:8080$/i.test(host)) {
+    throw new Error(
+      `Refusing to seed Firestore at "${host}". Only the local Firestore emulator on port 8080 is supported.`,
+    );
+  }
+
+  return host;
 }
 
-initializeApp({projectId: "roami-7c0bd"});
-const db = getFirestore();
+export function buildSeedRecords() {
+  const users = SEED_USERS.map((user) => ({
+    ...user,
+    createdAt: SEED_TIMESTAMP,
+  }));
+  const places = SEED_PLACES.map((place) => ({
+    ...place,
+    city: SEED_CITY,
+    openingHours: null,
+    missingFields: ["openingHours"],
+    source: {
+      provider: "manual" as const,
+      providerId: null,
+      retrievedAt: SEED_TIMESTAMP,
+    },
+    updatedAt: SEED_TIMESTAMP,
+  }));
+  const recommendations = SEED_RECOMMENDATIONS.map((recommendation) => ({
+    ...recommendation,
+    visitDate: null,
+    sourceLinks: [] as string[],
+    moderationStatus: "active" as const,
+    createdAt: SEED_TIMESTAMP,
+  }));
 
-const NOW = "2026-10-01T12:00:00Z";
-const CITY = "Seattle";
+  if (places.length !== 50 || recommendations.length !== 75) {
+    throw new Error(
+      `Seed data must contain exactly 50 places and 75 recommendations; found ${places.length} places and ${recommendations.length} recommendations.`,
+    );
+  }
 
-const USERS = [
-  {id: "u-maya", name: "Maya", bio: "Exchange student. Loves live music.", interests: ["jazz", "food"]},
-  {id: "u-jonas", name: "Jonas", bio: "Local. Coffee and parks.", interests: ["coffee", "parks"]},
-];
+  const placeIds = new Set(places.map((place) => place.id));
+  const recommendationIds = new Set(
+    recommendations.map((recommendation) => recommendation.id),
+  );
+  const userIds = new Set(users.map((user) => user.id));
+  if (
+    userIds.size !== users.length ||
+    placeIds.size !== places.length ||
+    recommendationIds.size !== recommendations.length ||
+    recommendations.some(
+      (recommendation) =>
+        !placeIds.has(recommendation.placeId) ||
+        !userIds.has(recommendation.authorId) ||
+        recommendation.description.trim().length === 0,
+    )
+  ) {
+    throw new Error(
+      "Seed data contains duplicate IDs or invalid recommendation references.",
+    );
+  }
 
-// id, name, latitude, longitude, category, openingHours (null means unknown)
-const PLACES: Array<[string, string, number, number, string, string | null]> = [
-  ["p-pike", "Pike Place Market", 47.6097, -122.3425, "market", "09:00-18:00"],
-  ["p-sam", "Seattle Art Museum", 47.6073, -122.3381, "museum", "10:00-17:00"],
-  ["p-kerry", "Kerry Park", 47.6295, -122.3599, "viewpoint", null],
-  ["p-jazz", "Jazz Alley", 47.6139, -122.3417, "music venue", "18:00-23:00"],
-  ["p-cafe", "Corner Coffee", 47.6149, -122.319, "cafe", "07:00-17:00"],
-  ["p-park", "Discovery Park", 47.6573, -122.4058, "park", null],
-  ["p-chihuly", "Chihuly Garden and Glass", 47.6205, -122.3509, "museum", "10:00-19:00"],
-];
+  return { users, places, recommendations };
+}
 
-// id, authorId, placeId, description, tags
-const RECS: Array<[string, string, string, string, string[]]> = [
-  ["r1", "u-maya", "p-jazz", "Small room, great trio on weekends. Go early to get a table near the stage.", ["jazz", "live music", "nightlife"]],
-  ["r2", "u-jonas", "p-kerry", "Best skyline view in the city, especially at sunset. Free.", ["views", "sunset", "free"]],
-  ["r3", "u-maya", "p-pike", "Go before 10 to beat the crowds. Get a pastry and walk the lower levels.", ["food", "market", "morning"]],
-  ["r4", "u-jonas", "p-cafe", "Used to have jazz nights, but it no longer has jazz. Still good coffee and quiet for studying.", ["cafe", "coffee", "study"]],
-  ["r5", "u-maya", "p-sam", "Free first Thursday evenings. The Pacific Northwest gallery is the highlight.", ["museum", "art", "free"]],
-  ["r6", "u-jonas", "p-park", "Big loop trail with water views. Bring a jacket, it gets windy.", ["parks", "hiking", "views"]],
-  ["r7", "u-maya", "p-chihuly", "Worth it for the glasshouse. Book ahead in summer.", ["art", "museum"]],
-  ["r8", "u-jonas", "p-jazz", "Dinner and a show. Pricey but the sound is great.", ["jazz", "live music", "dinner"]],
-];
-
-async function main(): Promise<void> {
+/** Writes deterministic document IDs, so rerunning replaces rather than duplicates seed records. */
+export async function seedEmulator(db: Firestore): Promise<{
+  users: number;
+  places: number;
+  recommendations: number;
+}> {
+  const records = buildSeedRecords();
   const batch = db.batch();
 
-  for (const u of USERS) {
-    batch.set(db.doc(`users/${u.id}`), {...u, createdAt: NOW});
-  }
-
-  for (const [id, name, latitude, longitude, category, openingHours] of PLACES) {
-    batch.set(db.doc(`places/${id}`), {
-      id,
-      name,
-      city: CITY,
-      latitude,
-      longitude,
-      category,
-      openingHours,
-      missingFields: openingHours === null ? ["openingHours"] : [],
-      source: {provider: "manual", providerId: null, retrievedAt: NOW},
-      updatedAt: NOW,
-    });
-  }
-
-  for (const [id, authorId, placeId, description, tags] of RECS) {
-    batch.set(db.doc(`recommendations/${id}`), {
-      id,
-      authorId,
-      placeId,
-      description,
-      tags,
-      visitDate: null,
-      sourceLinks: [],
-      moderationStatus: "active",
-      createdAt: NOW,
-    });
+  for (const user of records.users) batch.set(db.doc(`users/${user.id}`), user);
+  for (const place of records.places)
+    batch.set(db.doc(`places/${place.id}`), place);
+  for (const recommendation of records.recommendations) {
+    batch.set(db.doc(`recommendations/${recommendation.id}`), recommendation);
   }
 
   await batch.commit();
-  console.log(`Seeded ${USERS.length} users, ${PLACES.length} places, ${RECS.length} recommendations.`);
+  return {
+    users: records.users.length,
+    places: records.places.length,
+    recommendations: records.recommendations.length,
+  };
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+export async function runSeed(
+  env: Record<string, string | undefined> = process.env,
+): Promise<void> {
+  const emulatorHost = requireFirestoreEmulatorHost(env);
+  const app = initializeApp({ projectId: SEED_PROJECT_ID });
+
+  try {
+    const counts = await seedEmulator(getFirestore(app));
+    console.log(
+      `Seeded ${counts.users} users, ${counts.places} places, and ${counts.recommendations} recommendations into the Firestore emulator at ${emulatorHost}.`,
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not seed the Firestore emulator at ${emulatorHost}. Confirm the emulator is running and reachable: ${detail}`,
+    );
+  }
+}
+
+if (require.main === module) {
+  runSeed().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

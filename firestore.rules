@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Roami security rules. There are no Cloud Functions, so the app writes to
 // Firestore directly and these rules are the server-side enforcement.
-// Part 1: profiles, saved places, reports. Trips stay read-only until part 2.
+// Rules enforce ownership, field shapes, and access to social and travel data.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -117,6 +117,119 @@ service cloud.firestore {
         && d.createdAt is string;
     }
 
+    function validRecommendation(recommendationId, authorId, d) {
+      return d.keys().hasOnly(['id', 'authorId', 'placeId', 'description', 'tags', 'visitDate', 'sourceLinks', 'moderationStatus', 'createdAt'])
+        && d.keys().hasAll(['id', 'authorId', 'placeId', 'description', 'tags', 'visitDate', 'sourceLinks', 'moderationStatus', 'createdAt'])
+        && d.id == recommendationId
+        && d.authorId == authorId
+        && shortString(d.placeId, 200)
+        && d.description is string && d.description.size() > 0
+        && d.tags is list
+        && (d.visitDate == null || d.visitDate is string)
+        && d.sourceLinks is list
+        && d.moderationStatus in ['active', 'hidden', 'removed']
+        && d.createdAt is string;
+    }
+
+    function commentTargetExists(d) {
+      return (d.targetType == 'place'
+          && exists(/databases/$(database)/documents/places/$(d.targetId)))
+        || (d.targetType == 'recommendation'
+          && exists(/databases/$(database)/documents/recommendations/$(d.targetId))
+          && get(/databases/$(database)/documents/recommendations/$(d.targetId)).data.moderationStatus == 'active');
+    }
+
+    function parentCommentIsActive(d) {
+      return d.parentCommentId == null
+        || (exists(/databases/$(database)/documents/comments/$(d.parentCommentId))
+          && get(/databases/$(database)/documents/comments/$(d.parentCommentId)).data.moderationStatus == 'active');
+    }
+
+    function validComment(commentId, authorId, d) {
+      return d.keys().hasOnly(['id', 'authorId', 'targetType', 'targetId', 'text', 'parentCommentId', 'isQuestion', 'replyPlaceId', 'moderationStatus', 'createdAt'])
+        && d.keys().hasAll(['id', 'authorId', 'targetType', 'targetId', 'text', 'parentCommentId', 'isQuestion', 'replyPlaceId', 'moderationStatus', 'createdAt'])
+        && d.id == commentId
+        && d.authorId == authorId
+        && d.targetType in ['recommendation', 'place']
+        && shortString(d.targetId, 200)
+        && d.text is string && d.text.size() > 0
+        && (d.parentCommentId == null || shortString(d.parentCommentId, 200))
+        && d.isQuestion is bool
+        && (d.replyPlaceId == null || shortString(d.replyPlaceId, 200))
+        && d.moderationStatus in ['active', 'hidden', 'removed']
+        && d.createdAt is string;
+    }
+
+    function validLike(d) {
+      return d.keys().hasOnly(['userId', 'recommendationId', 'createdAt'])
+        && d.keys().hasAll(['userId', 'recommendationId', 'createdAt'])
+        && d.userId == request.auth.uid
+        && shortString(d.recommendationId, 200)
+        && d.createdAt is string;
+    }
+
+    function validFollow(d) {
+      return d.keys().hasOnly(['followerId', 'followeeId', 'createdAt'])
+        && d.keys().hasAll(['followerId', 'followeeId', 'createdAt'])
+        && d.followerId == request.auth.uid
+        && shortString(d.followeeId, 200)
+        && d.followeeId != d.followerId
+        && d.createdAt is string;
+    }
+
+    function validCollection(collectionId, ownerId, d) {
+      return d.keys().hasOnly(['id', 'ownerId', 'title', 'placeIds', 'recommendationIds', 'isPublished', 'createdAt'])
+        && d.keys().hasAll(['id', 'ownerId', 'title', 'placeIds', 'recommendationIds', 'isPublished', 'createdAt'])
+        && d.id == collectionId
+        && d.ownerId == ownerId
+        && d.title is string && d.title.size() > 0
+        && d.placeIds is list
+        && d.recommendationIds is list
+        && d.isPublished is bool
+        && d.createdAt is string;
+    }
+
+    function validVisit(visitId, userId, d) {
+      return d.keys().hasOnly(['id', 'userId', 'placeId', 'visitDate'])
+        && d.keys().hasAll(['id', 'userId', 'placeId', 'visitDate'])
+        && d.id == visitId
+        && d.userId == userId
+        && shortString(d.placeId, 200)
+        && shortString(d.visitDate, 10);
+    }
+
+    function validRanking(rankingId, userId, d) {
+      return d.keys().hasOnly(['id', 'userId', 'category', 'placeIds'])
+        && d.keys().hasAll(['id', 'userId', 'category', 'placeIds'])
+        && d.id == rankingId
+        && d.userId == userId
+        && d.category is string && d.category.size() > 0
+        && rankingId == userId + '_' + d.category
+        && d.placeIds is list;
+    }
+
+    function validBlock(d) {
+      return d.keys().hasOnly(['userId', 'blockedUserId', 'createdAt'])
+        && d.keys().hasAll(['userId', 'blockedUserId', 'createdAt'])
+        && d.userId == request.auth.uid
+        && shortString(d.blockedUserId, 200)
+        && d.blockedUserId != d.userId
+        && d.createdAt is string;
+    }
+
+    function validPreparationTask(taskId, d) {
+      return d.keys().hasOnly(['id', 'tripStopId', 'title', 'bookingUrl', 'source', 'deadline', 'needsReview'])
+        && d.keys().hasAll(['id', 'tripStopId', 'title', 'bookingUrl', 'source', 'deadline', 'needsReview'])
+        && d.id == taskId
+        && shortString(d.tripStopId, 200)
+        && d.title is string && d.title.size() > 0
+        && (d.bookingUrl == null || d.bookingUrl is string)
+        && (d.source == null || d.source is string)
+        && (d.deadline == null || d.deadline is string)
+        && d.needsReview is bool
+        && exists(/databases/$(database)/documents/tripStops/$(d.tripStopId));
+    }
+
     // Profiles: any signed-in user can read; you can create and edit only your own.
     // Profile documents must never hold private data such as email.
     match /users/{userId} {
@@ -136,16 +249,51 @@ service cloud.firestore {
     match /recommendations/{id} {
       allow read: if signedIn()
         && (resource.data.moderationStatus == 'active' || isUser(resource.data.authorId));
+      allow create: if signedIn()
+        && validRecommendation(id, request.auth.uid, request.resource.data)
+        && request.resource.data.moderationStatus == 'active'
+        && exists(/databases/$(database)/documents/places/$(request.resource.data.placeId));
+      allow update: if isUser(resource.data.authorId)
+        && validRecommendation(id, resource.data.authorId, request.resource.data)
+        && request.resource.data.placeId == resource.data.placeId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.moderationStatus == resource.data.moderationStatus;
+      allow delete: if isUser(resource.data.authorId);
     }
 
     match /comments/{id} {
       allow read: if signedIn()
         && (resource.data.moderationStatus == 'active' || isUser(resource.data.authorId));
+      allow create: if signedIn()
+        && validComment(id, request.auth.uid, request.resource.data)
+        && request.resource.data.moderationStatus == 'active'
+        && commentTargetExists(request.resource.data)
+        && parentCommentIsActive(request.resource.data)
+        && (request.resource.data.replyPlaceId == null
+          || exists(/databases/$(database)/documents/places/$(request.resource.data.replyPlaceId)));
+      allow update: if isUser(resource.data.authorId)
+        && validComment(id, resource.data.authorId, request.resource.data)
+        && request.resource.data.targetType == resource.data.targetType
+        && request.resource.data.targetId == resource.data.targetId
+        && request.resource.data.parentCommentId == resource.data.parentCommentId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.moderationStatus == resource.data.moderationStatus
+        && commentTargetExists(request.resource.data)
+        && parentCommentIsActive(request.resource.data)
+        && (request.resource.data.replyPlaceId == null
+          || exists(/databases/$(database)/documents/places/$(request.resource.data.replyPlaceId)));
+      allow delete: if isUser(resource.data.authorId);
     }
 
     match /collections/{id} {
       allow read: if signedIn()
         && (resource.data.isPublished == true || isUser(resource.data.ownerId));
+      allow create: if isUser(request.resource.data.ownerId)
+        && validCollection(id, request.auth.uid, request.resource.data);
+      allow update: if isUser(resource.data.ownerId)
+        && validCollection(id, resource.data.ownerId, request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isUser(resource.data.ownerId);
     }
 
     // Saved places: private. The document ID must be userId_placeId, which gives
@@ -164,25 +312,50 @@ service cloud.firestore {
       allow delete: if isUser(resource.data.userId);
     }
 
-    // Still read-only from the app.
     match /visits/{id} {
       allow read: if isUser(resource.data.userId);
+      allow create: if isUser(request.resource.data.userId)
+        && validVisit(id, request.auth.uid, request.resource.data)
+        && exists(/databases/$(database)/documents/places/$(request.resource.data.placeId));
+      allow update: if isUser(resource.data.userId)
+        && validVisit(id, resource.data.userId, request.resource.data)
+        && request.resource.data.userId == resource.data.userId
+        && exists(/databases/$(database)/documents/places/$(request.resource.data.placeId));
+      allow delete: if isUser(resource.data.userId);
     }
 
     match /rankings/{id} {
       allow read: if isUser(resource.data.userId);
+      allow create: if isUser(request.resource.data.userId)
+        && validRanking(id, request.auth.uid, request.resource.data);
+      allow update: if isUser(resource.data.userId)
+        && validRanking(id, resource.data.userId, request.resource.data);
+      allow delete: if isUser(resource.data.userId);
     }
 
     match /likes/{id} {
       allow read: if isUser(resource.data.userId);
+      allow create: if signedIn()
+        && validLike(request.resource.data)
+        && exists(/databases/$(database)/documents/recommendations/$(request.resource.data.recommendationId))
+        && get(/databases/$(database)/documents/recommendations/$(request.resource.data.recommendationId)).data.moderationStatus == 'active';
+      allow delete: if isUser(resource.data.userId);
     }
 
     match /blocks/{id} {
       allow read: if isUser(resource.data.userId);
+      allow create: if signedIn()
+        && validBlock(request.resource.data)
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.blockedUserId));
+      allow delete: if isUser(resource.data.userId);
     }
 
     match /follows/{id} {
       allow read: if isUser(resource.data.followerId) || isUser(resource.data.followeeId);
+      allow create: if signedIn()
+        && validFollow(request.resource.data)
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.followeeId));
+      allow delete: if isUser(resource.data.followerId);
     }
 
     // Trips: the owner and people the trip is shared with can read (view-only).
@@ -231,6 +404,12 @@ service cloud.firestore {
     // Preparation tasks (booking links, deadlines) are owner-only, even on shared trips.
     match /preparationTasks/{taskId} {
       allow read: if isUser(tripOwnerId(taskTripId(resource.data.tripStopId)));
+      allow create: if validPreparationTask(taskId, request.resource.data)
+        && isUser(tripOwnerId(taskTripId(request.resource.data.tripStopId)));
+      allow update: if validPreparationTask(taskId, request.resource.data)
+        && isUser(tripOwnerId(taskTripId(resource.data.tripStopId)))
+        && request.resource.data.tripStopId == resource.data.tripStopId;
+      allow delete: if isUser(tripOwnerId(taskTripId(resource.data.tripStopId)));
     }
 
     // Reports: any signed-in user can file one as themselves, always as 'open'.

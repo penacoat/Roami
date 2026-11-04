@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   query,
+  setDoc,
   where,
   type DocumentData,
 } from 'firebase/firestore';
@@ -19,6 +20,11 @@ const IN_LIMIT = 30;
 
 const STATUSES: ModerationStatus[] = ['active', 'hidden', 'removed'];
 
+/** Firestore-generated ID for a new recommendation. */
+export function newRecommendationId(): string {
+  return doc(collection(db, RECOMMENDATIONS)).id;
+}
+
 function toRecommendation(id: string, data: DocumentData): Recommendation {
   const status = STATUSES.find((s) => s === data.moderationStatus) ?? 'removed';
   return {
@@ -32,6 +38,25 @@ function toRecommendation(id: string, data: DocumentData): Recommendation {
     moderationStatus: status,
     createdAt: String(data.createdAt ?? ''),
   };
+}
+
+/** Exactly the fields allowed by validRecommendation in firestore.rules. */
+function recommendationDocument(recommendation: Recommendation): DocumentData {
+  return {
+    id: recommendation.id,
+    authorId: recommendation.authorId,
+    placeId: recommendation.placeId,
+    description: recommendation.description,
+    tags: recommendation.tags,
+    visitDate: recommendation.visitDate,
+    sourceLinks: recommendation.sourceLinks,
+    moderationStatus: recommendation.moderationStatus,
+    createdAt: recommendation.createdAt,
+  };
+}
+
+export async function createRecommendation(recommendation: Recommendation): Promise<void> {
+  await setDoc(doc(db, RECOMMENDATIONS, recommendation.id), recommendationDocument(recommendation));
 }
 
 /** Active recommendations for one place. The rules require the moderationStatus filter. */

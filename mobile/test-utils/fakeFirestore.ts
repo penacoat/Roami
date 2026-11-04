@@ -38,6 +38,17 @@ const STOP_FIELDS = [
   'isRequired',
   'warnings',
 ];
+const RECOMMENDATION_FIELDS = [
+  'id',
+  'authorId',
+  'placeId',
+  'description',
+  'tags',
+  'visitDate',
+  'sourceLinks',
+  'moderationStatus',
+  'createdAt',
+];
 
 class FakeFirestoreError extends Error {
   constructor(
@@ -81,6 +92,7 @@ export const fake = {
     this.docs = new Map();
     this.uid = null;
     this.reads = 0;
+    autoId = 0;
   },
   /** Writes directly, skipping the rules (like withSecurityRulesDisabled). */
   seed(path: string, data: Data) {
@@ -276,6 +288,45 @@ function checkWrite(
     }
     if (previous.userId !== uid) throw deny('only the owner can change a save');
     for (const field of ['userId', 'placeId', 'createdAt']) {
+      if (next[field] !== previous[field]) throw deny(`${field} cannot change`);
+    }
+    return;
+  }
+
+  if (collectionName === 'recommendations') {
+    if (!next) {
+      if (!previous || previous.authorId !== uid) {
+        throw deny('only the author can delete a recommendation');
+      }
+      return;
+    }
+    if (!sameKeys(next, RECOMMENDATION_FIELDS)) {
+      throw deny(`recommendation fields ${Object.keys(next).join(',')}`);
+    }
+    if (next.id !== id) throw deny('recommendation ID must match the document ID');
+    if (
+      typeof next.authorId !== 'string' ||
+      typeof next.placeId !== 'string' ||
+      typeof next.description !== 'string' ||
+      next.description.length === 0 ||
+      !Array.isArray(next.tags) ||
+      (next.visitDate !== null && typeof next.visitDate !== 'string') ||
+      !Array.isArray(next.sourceLinks) ||
+      !['active', 'hidden', 'removed'].includes(String(next.moderationStatus)) ||
+      typeof next.createdAt !== 'string'
+    ) {
+      throw deny('recommendation fields are malformed');
+    }
+    if (!previous) {
+      if (next.authorId !== uid) throw deny('recommendation author must be you');
+      if (next.moderationStatus !== 'active') throw deny('new recommendations must be active');
+      if (!before.has(`places/${next.placeId}`)) {
+        throw deny('recommendation place must exist');
+      }
+      return;
+    }
+    if (previous.authorId !== uid) throw deny('only the author can change a recommendation');
+    for (const field of ['authorId', 'placeId', 'createdAt', 'moderationStatus']) {
       if (next[field] !== previous[field]) throw deny(`${field} cannot change`);
     }
     return;

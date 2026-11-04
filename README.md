@@ -17,11 +17,12 @@ _Explore-only demo branch; native device validation is pending._
 | Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. Explore includes a Saved filter and save/unsave controls; note editing is not exposed. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
-| Share a recommendation collection | Not started. |
-| Rank and recommend a visited place | Not started. Writing recommendations needs new security rules first. |
+| Share a recommendation collection | Not started. Rules now support owner-managed collections; the app flow is not wired yet. |
+| Rank and recommend a visited place | In progress. `createRecommendation` now writes through the live API; visit/ranking flows and contribution UI are not wired yet. |
 
 **The operational use case touches every major component.** Signing up goes from the sign-up screen to Firebase Authentication, then through the API layer (`callApi('ensureProfile')`) to a service, a repository, and Cloud Firestore, where the security rules check the write.
 
+**To see the rest of the backend working,** sign in and tap **Run backend check** on the home screen. It exercises profiles, places, feed, search, saved places, and trips through the same API layer the screens use, and shows PASS or FAIL for each step. All 20 API calls now have live handlers, including `createRecommendation`; there is not yet a contribution screen or backend-check step for creating recommendations.
 **This branch demonstrates Explore only:** existing sign-in → Explore → sign-out. It replaces the developer checklist with the map, without adding navigation tabs or trip screens. The checklist remains in `mobile/src/dev/PlacesCheck.tsx`; backend services and login UI are unchanged.
 
 ## Prerequisites
@@ -69,10 +70,10 @@ npm --prefix mobile run format:check
 npm --prefix mobile run typecheck
 ```
 
-**Security rules tests** (65 tests, run against the Firestore emulator; needs Java 21). Stop any running emulators first, because these need port 8080:
+**Firestore rules and recommendation integration tests** (101 tests, run against the Firestore and Auth emulators; needs Java 21). Stop any running emulators first, because these need ports 8080 and 9099:
 
 ```bash
-npx firebase-tools emulators:exec --only firestore "npm --prefix backend run test:rules"
+npx firebase-tools emulators:exec --only auth,firestore "npm --prefix backend run test:rules -- --runInBand"
 ```
 
 **Continuous integration.** GitHub Actions (`.github/workflows/mobile-ci.yml`) runs lint, the formatting check, the typecheck, and the app tests on every pull request to `main` and every push to `main`. The rules tests are run locally.
@@ -95,7 +96,7 @@ Wait for "All emulators ready." The Emulator UI is at http://127.0.0.1:4000. War
 npm --prefix backend run seed
 ```
 
-It prints `Seeded 2 users, 7 places, 8 recommendations.`
+It prints the seeded counts (2 users, 50 places, and 75 recommendations) and the emulator host. The seed script refuses non-local emulator hosts and uses stable document IDs, so it can safely be rerun. Venue coordinates are approximate demo map pins, hours are unknown, and recommendation text is illustrative guide copy rather than user-submitted reviews or claims of personal experience.
 
 **3. Point the app at the emulators.** Create a file named `mobile/.env` with these four lines:
 
