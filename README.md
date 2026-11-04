@@ -95,7 +95,7 @@ Wait for "All emulators ready." The Emulator UI is at http://127.0.0.1:4000. War
 npm --prefix backend run seed
 ```
 
-It prints `Seeded 2 users, 7 places, 8 recommendations.`
+It prints the seeded counts (2 users, 50 places, and 75 recommendations) and the emulator host. The seed script refuses non-local emulator hosts and uses stable document IDs, so it can safely be rerun. Venue coordinates are approximate demo map pins, hours are unknown, and recommendation text is illustrative guide copy rather than user-submitted reviews or claims of personal experience.
 
 **3. Point the app at the emulators.** Create a file named `mobile/.env` with these four lines:
 
