@@ -234,9 +234,10 @@ const discoveryHandlers: Pick<
     return clone({ profile });
   },
 
-  async listPlaces() {
+  async listPlaces(request) {
     await delay();
-    return clone({ places: PLACES });
+    // The bundled demo catalog contains Seattle places only.
+    return clone({ places: request.city.trim().toLowerCase() === 'seattle' ? PLACES : [] });
   },
 
   async getPlace(request) {

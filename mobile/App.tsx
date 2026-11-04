@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { AuthScreen } from './src/auth/AuthScreens';
 import { signOut } from './src/auth/AuthService';
-import { PlacesCheck } from './src/dev/PlacesCheck';
+import { MapScreen } from './src/screens/MapScreen';
 import { callApi } from './src/api';
 import { registerServices } from './src/services';
 
@@ -39,34 +40,19 @@ function Root() {
     return <AuthScreen />;
   }
 
-  return (
-    <View style={styles.center}>
-      <Text style={styles.welcome}>Welcome, {user.displayName ?? user.email}!</Text>
-      <Pressable style={styles.button} onPress={() => signOut()}>
-        <Text style={styles.buttonText}>Sign out</Text>
-      </Pressable>
-      <PlacesCheck />
-    </View>
-  );
+  return <MapScreen key={user.uid} onSignOut={signOut} />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  welcome: { fontSize: 22, marginBottom: 24 },
-  button: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginBottom: 16,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

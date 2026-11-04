@@ -8,13 +8,13 @@ The MVP covers Pike Place Market and nearby downtown Seattle.
 
 ## Status
 
-_Last updated November 2, 2026._
+_Explore-only demo branch; native device validation is pending._
 
 | Use case | Status |
 |---|---|
 | Create an account, sign in, stay signed in, sign out | **Operational.** Signing up also creates the user's public profile in Firestore (`ensureProfile`, `getProfile`, `updateProfile`). |
-| Discover places that match an interest (search, map) | In progress. The data layer is live: search, the place list, place details, and the feed (`searchRecommendations`, `listPlaces`, `getPlace`, `getFeed`). Search matches tags and written text, including synonyms and prefixes, skips negations such as "no longer has jazz", and explains each match. No search or map screen yet. |
-| Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. No saved places screen yet. |
+| Discover places that match an interest (search, map) | In progress. The data layer is live: search, the place list, place details, and the feed (`searchRecommendations`, `listPlaces`, `getPlace`, `getFeed`). Search matches tags and written text, including synonyms and prefixes, skips negations such as "no longer has jazz", and explains each match. Explore now connects search, catalog pins, and place details. |
+| Save a place for later | In progress. The data layer is live (`savePlace`, `listSavedPlaces`, `updateSavedNote`, `removeSavedPlace`): one entry per place, each recommendation that led to it kept as a source, and a personal note. Explore includes a Saved filter and save/unsave controls; note editing is not exposed. |
 | Create an itinerary | In progress. The data layer is live: creating, listing, and opening trips, and adding candidates and stops (`createTrip`, `listTrips`, `getTrip`, `addCandidate`, `addStop`). No trip screens yet. |
 | Adjust an existing itinerary | In progress. The data layer is live: moving and removing stops (`moveStop`, `removeStop`), with out-of-date edits refused. No trip screens yet. |
 | Share a recommendation collection | Not started. Rules now support owner-managed collections; the app flow is not wired yet. |
@@ -23,12 +23,13 @@ _Last updated November 2, 2026._
 **The operational use case touches every major component.** Signing up goes from the sign-up screen to Firebase Authentication, then through the API layer (`callApi('ensureProfile')`) to a service, a repository, and Cloud Firestore, where the security rules check the write.
 
 **To see the rest of the backend working,** sign in and tap **Run backend check** on the home screen. It exercises profiles, places, feed, search, saved places, and trips through the same API layer the screens use, and shows PASS or FAIL for each step. All 20 API calls now have live handlers, including `createRecommendation`; there is not yet a contribution screen or backend-check step for creating recommendations.
+**This branch demonstrates Explore only:** existing sign-in → Explore → sign-out. It replaces the developer checklist with the map, without adding navigation tabs or trip screens. The checklist remains in `mobile/src/dev/PlacesCheck.tsx`; backend services and login UI are unchanged.
 
 ## Prerequisites
 
 | Tool | Needed for | Check |
 |---|---|---|
-| [Node.js](https://nodejs.org) 20 or newer (LTS) | Everything | `node -v` |
+| [Node.js](https://nodejs.org) 24.x, at least 24.12 (tested: 24.22.2) | Everything | `node -v` |
 | Git | Getting the code | `git --version` |
 | Java 21 or newer | The Firebase emulators (running the app locally, rules tests) | `java -version` |
 | A Mac with Xcode, **or** an iPhone with [Expo Go](https://apps.apple.com/app/expo-go/id982107779) (latest version) | Running the app | |
@@ -120,18 +121,21 @@ npx expo start --clear
 
 Press `i` to open the iOS Simulator, or scan the QR code with an iPhone's Camera app to open the app in Expo Go.
 
-**5. Use it.** Tap **New to Roami? Create an account**, then sign up with any name, any email, and a password of 6 or more characters. The account is created in the Auth emulator, and appears in the Emulator UI under Authentication. On the home screen:
+**5. Use it.** Tap **New to Roami? Create an account**, then sign up with any name, any email, and a password of 6 or more characters. The account is created in the Auth emulator, and appears in the Emulator UI under Authentication. In Explore:
 
-- **Load places** lists the sample places from Firestore.
-- **Run backend check** runs every live API call and shows PASS or FAIL for each. All steps should pass.
+- Pan/zoom and tap a pin for details. Pull up the places panel for the list; search or use catalog-derived category chips. Seattle has seeded records; other cities may be empty.
+- Save a place or recommendation, close details, and select **Saved**. **Saved ✓ · Unsave** removes that saved entry and its recommendation sources/note; the place can be saved again.
+- The seven seeded places and eight recommendations are demo content. Coordinates, hours, and recommendation text are unverified; missing source links stay missing. Saves use the local Firestore emulator when `EXPO_PUBLIC_API_MODE=live`.
+
+Before a native demo, check map tiles, pinch/pan, pins, panel dragging, keyboard search, and save/unsave on an iPhone or simulator. Component tests and browser substitutes do not verify native gestures.
 
 ### Troubleshooting
 
 | What you see | Fix |
 |---|---|
 | A spinner for about 8 seconds, then the sign-in screen, or "Network error" on sign-up | The app can't reach the emulators. Check that they're running and that `EXPO_PUBLIC_EMULATOR_HOST` matches `ipconfig getifaddr en0` (it changes when you switch Wi-Fi). Then restart with `npx expo start --clear` and fully close Expo Go. |
-| "API mode: fixtures" on the home screen | `mobile/.env` wasn't picked up. Check it's in the `mobile/` folder, then restart with `npx expo start --clear`. |
-| "Need at least 3 places" in the backend check, or 0 places | The emulators restarted and lost the sample data. Rerun step 2. |
+| "Demo data · temporary saves" in Explore | `mobile/.env` wasn't picked up. Check it's in the `mobile/` folder, then restart with `npx expo start --clear`. |
+| No catalog places for Seattle after clearing filters | The emulators restarted and lost the sample data. Rerun step 2. |
 | "Port already in use" when starting the emulators | Another copy is still running. Stop it with Ctrl+C in its terminal. |
 | The app doesn't load at all on an iPhone | Some networks block devices from reaching each other. Connect the computer to the phone's Personal Hotspot and use the new address from `ipconfig getifaddr en0`. |
 
