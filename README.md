@@ -12,16 +12,16 @@ These are the user flows wired from the app to Firebase. Follow the [Run](#run) 
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Sign up/sign in, persist the session, and sign out                     | **Operational.** The auth screen uses Firebase Authentication. Sign-up calls `ensureProfile` through `callApi`; the registered profile service writes through its repository to Firestore, subject to Firestore rules. | Start the local emulators and app below, create an account, and check Authentication and Firestore in the Emulator UI. |
 | Explore Seattle places, search recommendations, and open place details | **Operational.** The Explore map calls the live place, search, and details services; they read the seeded Firestore data through repositories.                                                                         | In Explore, pan/zoom the map, tap a pin, open the places panel, and search (for example, `jazz`).                      |
-| Save and unsave a place or recommendation                              | **Operational.** Explore reads and writes saved places using the registered save services, Firestore repositories, and rules.                                                                                          | Save a place or a recommendation from its details, then use the Saved filter; unsave it to remove it.                  |
+| Save and unsave a place or recommendation                              | **Operational.** Explore reads and writes saved places using the registered save services, Firestore repositories, and rules.                                                                                          | Save a place or recommendation in Explore, then open Saved. Unsave from either screen; both refresh after changes.                  |
 | Edit a profile or saved-place note                                     | **Not exposed in the app.** The API handlers are registered and their services write to Firestore, but there is no user-facing editor.                                                                                 | No app screen currently exercises these flows.                                                                         |
 | Browse a recommendation feed                                           | **Connected.** The Postcards tab uses `getFeed`; See place opens the matching Explore details.                                                                | Open Postcards, flip a card, then tap See place to inspect or save its place in Explore.                                                                             |
 | Create a recommendation                                                | **Not operational as an app flow.** The real handler and repository path exist and have integration tests, but no contribution screen calls it.                                                                        | No contribution screen currently exists.                                                                               |
-| Create, view, or edit trips and itinerary stops                        | **Trip creation is connected.** The New trip tab saves city, dates, and daily planning hours. Viewing existing trips or adding/editing/reordering itinerary stops is not exposed.                                                                                                          | Use New trip to create a trip and view its confirmation; itinerary editing is not available.                                                                                           |
+| Create, view, or edit trips and itinerary stops                        | **Trip creation is connected.** The Build Trip tab saves city, dates, and daily planning hours. Viewing existing trips or adding/editing/reordering itinerary stops is not exposed.                                                                                                          | Use Build Trip to create a trip and view its confirmation; itinerary editing is not available.                                                                                           |
 | Share collections                                                      | **Not operational as an app flow.** There is no collection API call or app flow for sharing.                                                                                                                           | Not available in the app.                                                                                              |
 
 ### API registration and screen call sites
 
-All 20 functions in the shared API contract have real handlers registered by `registerServices()`. Registration alone does not make a use case operational: the screen must also be reachable and call the handler. “Developer check only” refers to `backendCheck.ts`, which is not presented by the running app. `PlacesCheck` has no route from the app. Expo Router connects Explore, Postcards, and New trip after sign-in; sign-out removes access to all three tabs.
+All 20 functions in the shared API contract have real handlers registered by `registerServices()`. Registration alone does not make a use case operational: the screen must also be reachable and call the handler. “Developer check only” refers to `backendCheck.ts`, which is not presented by the running app. `PlacesCheck` has no route from the app. Expo Router connects Explore, Postcards, Build Trip, and Saved after sign-in; sign-out removes access to all four tabs.
 
 | API call                | Real service registered? | Screen/component call site       |
 | ----------------------- | -----------------------: | -------------------------------- |
@@ -34,10 +34,10 @@ All 20 functions in the shared API contract have real handlers registered by `re
 | `searchRecommendations` |                      Yes | Explore map                      |
 | `createRecommendation`  |                      Yes | None                             |
 | `savePlace`             |                      Yes | Explore map/place details        |
-| `listSavedPlaces`       |                      Yes | Explore map                      |
+| `listSavedPlaces`       |                      Yes | Explore and Saved tabs           |
 | `updateSavedNote`       |                      Yes | Developer check only             |
-| `removeSavedPlace`      |                      Yes | Explore map/place details        |
-| `createTrip`            |                      Yes | New trip tab             |
+| `removeSavedPlace`      |                      Yes | Explore details and Saved tab    |
+| `createTrip`            |                      Yes | Build Trip tab             |
 | `listTrips`             |                      Yes | Developer check only             |
 | `getTrip`               |                      Yes | Developer check only             |
 | `addCandidate`          |                      Yes | Developer check only             |
@@ -46,7 +46,7 @@ All 20 functions in the shared API contract have real handlers registered by `re
 | `moveStop`              |                      Yes | Developer check only             |
 | `removeStop`            |                      Yes | Developer check only             |
 
-The local seed contains **2 users, 50 places, and 75 recommendations**. These counts are asserted in seed tests. Coordinates are approximate demo pins, opening hours are unknown, and recommendation text is illustrative rather than user-submitted reviews.
+The local seed contains **2 users, 50 places, and 75 recommendations**. These counts are asserted in seed tests. Coordinates are approximate sample pins, opening hours are unknown, and recommendation text is illustrative rather than user-submitted reviews. The app omits setup banners; sample postcards and recommendations retain short labels, and static postcard photos are marked illustrative. Unverified hardcoded street addresses and invented social handles are not displayed. Fixture mode still stores saves and trips in memory; use live mode with Firebase for persistence. Removing UI setup wording does not change storage or data provenance.
 
 ## Prerequisites
 
@@ -166,7 +166,7 @@ The app's live flows use local Firebase Authentication and Firestore emulators. 
 
    Press `i` for the iOS Simulator, or scan the QR code with the iPhone Camera app to open Expo Go. Use a Mac with Xcode for the Simulator.
 
-5. **Exercise the operational flows.** Create an account, then use the Explore, Postcards, and New trip tabs. In Postcards, flip a card and tap See place to open its Explore details; save it, close details, and use Saved. Tabs retain the current screen state; See place clears conflicting map filters and opens the Seattle catalog. Search and save/unsave also work directly in Explore. New trip uses Athena Bao’s existing trip-creation UI (from `setup-ci` at `f83515c`) adapted to call the shared `createTrip` service. Choose a city, start/end dates, and daily hours; submit to save a trip. This does not add the saved place to that trip or schedule any stops. In the Emulator UI, inspect Authentication and Firestore to confirm the writes.
+5. **Exercise the operational flows.** Create an account, then use the Explore, Postcards, Build Trip, and Saved tabs. In Postcards, flip a card and tap See place to open its Explore details; save it, close details, and use Saved. Tabs retain the current screen state; See place clears conflicting map filters and opens the Seattle catalog. Search and save/unsave also work directly in Explore. Build Trip uses Athena Bao’s existing trip-creation UI (from `setup-ci` at `f83515c`) adapted to call the shared `createTrip` service. Choose a city, start/end dates, and daily hours; submit to save a trip. This does not add the saved place to that trip or schedule any stops. The Saved tab refreshes on focus and after writes from Explore; it can open a place or unsave it. In the Emulator UI, inspect Authentication and Firestore to confirm the writes.
 
 To run against the team's real Firebase project instead, copy `mobile/.env.example` to `mobile/.env`, fill in its Firebase values from the team's [living document](https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing), leave `EXPO_PUBLIC_EMULATOR_HOST` empty, and use the intended API mode. Never commit `.env`.
 
@@ -236,7 +236,7 @@ Roami/
 ├── mobile/
 │   ├── App.tsx
 │   ├── src/
-│   │   ├── app/                 # Protected sign-in and Explore/Postcards/New trip routes
+│   │   ├── app/                 # Protected sign-in and Explore/Postcards/Build Trip/Saved routes
 │   │   ├── api/                 # API client and fixture handlers
 │   │   ├── auth/                # Authentication UI and Firebase Auth
 │   │   ├── components/          # Recommendation UI components

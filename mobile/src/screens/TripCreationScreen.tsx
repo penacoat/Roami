@@ -130,12 +130,10 @@ export function TripCreationScreen({ onSignOut }: Props) {
                   TRIP{'\n'}BOOK{'\n'}✓
                 </Text>
               </View>
-              <Text style={styles.eyebrow}>A POSTCARD WAITING TO HAPPEN</Text>
+              <Text style={styles.eyebrow}>TRIP CREATED</Text>
               <Text accessibilityRole="header" style={styles.title}>
-                You’re going to{'\n'}
-                {createdTrip.city}.
+                {createdTrip.city}
               </Text>
-              <Text style={styles.subtitle}>Your trip is ready for a little possibility.</Text>
               <View style={styles.postcard}>
                 <View accessible={false} style={styles.postcardEdge}>
                   {Array.from({ length: 16 }, (_, index) => (
@@ -148,7 +146,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
                     />
                   ))}
                 </View>
-                <Text style={styles.dateLabel}>YOUR NEXT CHAPTER</Text>
+                <Text style={styles.dateLabel}>TRIP DETAILS</Text>
                 <Text style={styles.cardTitle}>{createdTrip.city}</Text>
                 <Text style={styles.summaryText}>
                   {formatDate(createdTrip.startDate)} – {formatDate(createdTrip.endDate)}
@@ -163,12 +161,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
                 </Text>
               </View>
               <Text style={styles.note}>
-                {getApiMode() === 'fixtures'
-                  ? 'Demo trip · temporary fixture storage.'
-                  : process.env.EXPO_PUBLIC_EMULATOR_HOST
-                    ? 'Saved to the local demo database.'
-                    : 'Saved to your account.'}{' '}
-                Places and itinerary editing are not connected yet.
+                {getApiMode() === 'fixtures' ? 'Trip created.' : 'Trip saved.'} No places added yet.
               </Text>
               {error ? (
                 <Text accessibilityRole="alert" style={styles.error}>
@@ -185,37 +178,23 @@ export function TripCreationScreen({ onSignOut }: Props) {
                   setError('');
                 }}
               >
-                <Text style={styles.primaryText}>Plan another trip</Text>
+                <Text style={styles.primaryText}>Create another trip</Text>
               </Pressable>
             </View>
           ) : (
             <>
               <View style={styles.intro}>
-                <Text style={styles.eyebrow}>THE WORLD, ONE POSTCARD AT A TIME</Text>
+                <Text style={styles.eyebrow}>NEW TRIP</Text>
                 <View style={styles.heroRow}>
                   <View style={styles.flex}>
                     <Text accessibilityRole="header" style={styles.title}>
-                      Where to next?
+                      Build a trip
                     </Text>
                     <Text style={styles.subtitle}>
-                      A new city. A few good finds.{'\n'}A trip that feels like you.
+                      Choose your destination, dates, and daily hours.
                     </Text>
                   </View>
-                  <View accessible={false} style={styles.heroStamp}>
-                    {['GO', 'SOMEWHERE', 'GOOD'].map((word) => (
-                      <Text
-                        key={word}
-                        style={styles.stampText}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.8}
-                      >
-                        {word}
-                      </Text>
-                    ))}
-                  </View>
                 </View>
-                <Text style={styles.handwritten}>Let’s make a little room for wandering.</Text>
               </View>
 
               <View style={styles.card}>
@@ -227,7 +206,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
                 <TextInput
                   accessibilityLabel="City or destination"
                   style={styles.input}
-                  placeholder="A city you’d love to get lost in"
+                  placeholder="City name"
                   placeholderTextColor={theme.muted}
                   value={draft.city}
                   onChangeText={(city) => update({ city })}
@@ -236,7 +215,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
                   returnKeyType="done"
                   editable={!saving && !signingOut}
                 />
-                <Text style={styles.helper}>A little inspiration</Text>
+                <Text style={styles.helper}>Suggestions</Text>
                 <View style={styles.chips}>
                   {destinations.map((city) => (
                     <Pressable
@@ -258,7 +237,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
               <View style={styles.card} pointerEvents={saving || signingOut ? 'none' : 'auto'}>
                 <Text style={styles.sectionNumber}>02 · THE DATES</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
-                  When’s the adventure?
+                  Travel dates
                 </Text>
                 <View style={styles.dateRow}>
                   <View style={styles.dateBox}>
@@ -283,13 +262,11 @@ export function TripCreationScreen({ onSignOut }: Props) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionNumber}>03 · YOUR OWN PACE</Text>
+                <Text style={styles.sectionNumber}>03 · DAILY HOURS</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
-                  Make time to explore
+                  Planning hours
                 </Text>
-                <Text style={styles.helper}>
-                  Set your daily planning hours. You can keep it easy.
-                </Text>
+                <Text style={styles.helper}>Choose when each day starts and ends.</Text>
                 <View style={styles.timeRow}>
                   <View style={styles.flex}>
                     <Text style={styles.label}>Start of day</Text>
@@ -322,10 +299,6 @@ export function TripCreationScreen({ onSignOut }: Props) {
                 </View>
                 <Text style={styles.helper}>24-hour time · 09:00 is 9 AM, 21:00 is 9 PM</Text>
               </View>
-
-              <Text style={styles.handwritten}>
-                The best stops are the ones you didn’t see coming.
-              </Text>
             </>
           )}
         </ScrollView>
@@ -333,7 +306,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
           <View style={styles.footer}>
             {days > 0 && (
               <Text style={styles.duration}>
-                {days} {days === 1 ? 'day' : 'days'} of possibility
+                {days} {days === 1 ? 'day' : 'days'}
                 {draft.city.trim() ? ` in ${draft.city.trim()}` : ''}
               </Text>
             )}
@@ -355,10 +328,9 @@ export function TripCreationScreen({ onSignOut }: Props) {
               {saving ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.primaryText}>Create my trip →</Text>
+                <Text style={styles.primaryText}>Create trip</Text>
               )}
             </Pressable>
-            <Text style={styles.note}>Your next chapter starts with a place.</Text>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -435,17 +407,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   subtitle: { color: theme.muted, fontSize: 13, fontWeight: '500', lineHeight: 21, marginTop: 9 },
-  heroStamp: {
-    width: 88,
-    height: 88,
-    flexShrink: 0,
-    borderRadius: 44,
-    borderWidth: 1.5,
-    borderColor: theme.accent,
-    padding: 5,
-    justifyContent: 'center',
-    transform: [{ rotate: '-13deg' }],
-  },
   stampText: {
     color: theme.accent,
     fontFamily: theme.serif,
@@ -454,14 +415,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     lineHeight: 15,
     textAlign: 'center',
-  },
-  handwritten: {
-    color: theme.accent,
-    fontFamily: theme.serif,
-    fontStyle: 'italic',
-    fontWeight: '600',
-    fontSize: 15,
-    lineHeight: 23,
   },
   sectionNumber: { color: theme.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: '700' },
   card: { paddingBottom: 22, borderBottomWidth: 1, borderBottomColor: theme.line, gap: 10 },

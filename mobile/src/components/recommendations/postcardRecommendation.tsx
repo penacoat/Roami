@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RecommendationView } from '@roami/shared';
-import { PLACE_ADDRESSES } from './placeAddresses';
+import { getApiMode } from '../../api';
 import { PLACE_PHOTOS } from './placePhotos';
 
 interface Props {
@@ -39,8 +39,8 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
 
   const name = recommendation.author?.name ?? 'A fellow traveler';
   const date = formatDate(recommendation.visitDate ?? recommendation.createdAt);
-  const address = PLACE_ADDRESSES[recommendation.place.id];
   const photo = PLACE_PHOTOS[recommendation.place.id];
+  const sample = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
 
   return (
     <View style={styles.postLayout}>
@@ -52,9 +52,10 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
           </View>
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.username}>{name} sent you a postcard</Text>
+          <Text style={styles.username}>Postcard from {name}</Text>
           <Text style={styles.meta}>
-            @{name.toLowerCase()} · {date}
+            {sample ? 'Sample postcard · ' : ''}
+            {date}
           </Text>
         </View>
         <View style={styles.smallStamp}>
@@ -92,8 +93,7 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
               </View>
               <View>
                 <Text style={styles.addressName}>{recommendation.place.name}</Text>
-                <Text style={styles.address}>{address?.street ?? 'Seattle'}</Text>
-                <Text style={styles.address}>{address?.cityLine ?? 'Washington'}</Text>
+                <Text style={styles.address}>Seattle</Text>
               </View>
             </View>
           </View>
@@ -102,6 +102,7 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
             <View style={styles.photoArea}>
               {photo ? <Image source={{ uri: photo }} style={styles.photo} /> : null}
               {photo ? <View style={styles.photoShade} /> : null}
+              {photo ? <Text style={styles.photoLabel}>Illustrative photo</Text> : null}
               <Text style={styles.frontPicture} numberOfLines={2}>
                 {recommendation.place.name}
               </Text>
@@ -135,6 +136,17 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
 }
 
 const styles = StyleSheet.create({
+  photoLabel: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    fontSize: 10,
+    color: CARD,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
   postLayout: {
     backgroundColor: PAPER,
     padding: 16,

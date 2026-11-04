@@ -20,7 +20,9 @@ it('flips the existing postcard and opens its actual catalog place', async () =>
   const open = jest.fn();
   await render(<RecommendationsScreen onOpenPlace={open} />);
   await screen.findByLabelText('Read postcard for Jazz Alley by Maya');
-  expect(screen.getByText(/Demo postcards/)).toBeTruthy();
+  expect(screen.getAllByText(/Sample postcard/).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/Demo postcards/)).toBeNull();
+  expect(screen.queryByText(/@maya/)).toBeNull();
   await fireEvent.press(screen.getByLabelText('Read postcard for Jazz Alley by Maya'));
   await screen.findByLabelText('Show photo for Jazz Alley by Maya');
   await fireEvent.press(screen.getByLabelText('See place: Jazz Alley, recommended by Maya'));

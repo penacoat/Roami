@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking } from 'react-native';
+import { Linking, Pressable, Text } from 'react-native';
 import { beforeEach, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
@@ -35,6 +35,69 @@ beforeEach(() => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
   resetFixtures();
+});
+
+function PlaceRequestHarness() {
+  const [placeId, setPlaceId] = React.useState<string>();
+  const clearRequest = React.useCallback(() => setPlaceId(undefined), []);
+  return (
+    <>
+      <Pressable accessibilityRole="button" onPress={() => setPlaceId('p-jazz')}>
+        <Text>Open postcard place</Text>
+      </Pressable>
+      <MapScreen
+        onSignOut={async () => undefined}
+        requestedPlaceId={placeId}
+        onPlaceRequestHandled={clearRequest}
+      />
+    </>
+  );
+}
+
+it.each([
+  ['pin', 'success'],
+  ['pin', 'failure'],
+  ['city', 'success'],
+  ['city', 'failure'],
+])('keeps a newer %s choice when an older place request ends in %s', async (choice, outcome) => {
+  const original = api.callApi;
+  const catalog = await original('listPlaces', { city: 'Seattle' });
+  await render(<PlaceRequestHarness />);
+  await screen.findByLabelText('Map pin for Kerry Park');
+  let resolve!: (value: typeof catalog) => void;
+  let reject!: (reason: Error) => void;
+  jest.spyOn(api, 'callApi').mockImplementationOnce(
+    () =>
+      new Promise((yes, no) => {
+        resolve = yes as typeof resolve;
+        reject = no;
+      }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Open postcard place' }));
+  await screen.findByLabelText('Opening place');
+  if (choice === 'pin') {
+    await fireEvent.press(screen.getByLabelText('Map pin for Kerry Park'));
+    await screen.findByRole('button', { name: 'Save place' });
+  } else {
+    await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+    await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
+    await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+    await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
+  }
+  await act(async () => {
+    if (outcome === 'success') resolve(catalog);
+    else reject(new Error('offline'));
+  });
+  expect(screen.queryByLabelText('Opening place')).toBeNull();
+  expect(
+    screen.queryByText('Could not open this place. Return to Postcards or Saved and try again.'),
+  ).toBeNull();
+  if (choice === 'pin') {
+    expect(screen.getByRole('header', { name: 'Kerry Park' })).toBeTruthy();
+  } else {
+    expect(screen.getByLabelText('Change city: Portland')).toBeTruthy();
+    expect(screen.queryByLabelText('Close place details')).toBeNull();
+  }
 });
 
 it('explains an unavailable postcard target instead of opening an unrelated place', async () => {
@@ -288,10 +351,10 @@ it('does not present emulator sample hours or authors as verified venue details'
       <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
     );
     await screen.findByLabelText('Open Jazz Alley');
-    expect(screen.getByText('Demo data · places and details unverified')).toBeTruthy();
+    expect(screen.queryByText(/Demo data/)).toBeNull();
     await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
-    await screen.findByText('Demo recommendation by Maya');
-    expect(screen.getByText('Demo hours · not verified')).toBeTruthy();
+    await screen.findByText('Sample recommendation · Maya');
+    expect(screen.getByText('Hours not verified')).toBeTruthy();
     expect(screen.queryByText(/18:00-23:00/)).toBeNull();
   } finally {
     if (previous === undefined) delete process.env.EXPO_PUBLIC_EMULATOR_HOST;

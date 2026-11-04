@@ -16,7 +16,11 @@ import {
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { callApi, getApiMode } from '../api';
+import { callApi } from '../api';
+import {
+  notifySavedPlacesChanged,
+  useSavedPlacesChangeVersion,
+} from '../hooks/useSavedPlacesChanges';
 import { PlaceDetails } from './map/PlaceDetails';
 import { PlacesPanel } from './map/PlacesPanel';
 import { colors } from './map/theme';
@@ -46,6 +50,7 @@ interface Props {
   onSignOut: () => Promise<void>;
   requestedPlaceId?: string;
   onPlaceRequestHandled?: () => void;
+  savedRefreshKey?: number;
 }
 interface SearchState {
   key: string;
@@ -53,8 +58,15 @@ interface SearchState {
   status: 'ready' | 'error';
 }
 
-export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }: Props) {
+export function MapScreen({
+  onSignOut,
+  requestedPlaceId,
+  onPlaceRequestHandled,
+  savedRefreshKey = 0,
+}: Props) {
   const map = useRef<MapView>(null);
+  const placeRequestVersion = useRef(0);
+  const savedChanges = useSavedPlacesChangeVersion('explore');
   const region = useRef(SEATTLE);
   const mapReady = useRef(false);
   const [city, setCity] = useState('Seattle');
@@ -80,7 +92,9 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
   const [search, setSearch] = useState<SearchState | null>(null);
   const [searchRetry, setSearchRetry] = useState(0);
   const [signOutError, setSignOutError] = useState('');
+  const [savedRefreshError, setSavedRefreshError] = useState('');
   const [placeRequestError, setPlaceRequestError] = useState('');
+  const openingPlace = Boolean(requestedPlaceId);
   const [signingOut, setSigningOut] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(600);
@@ -116,6 +130,29 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
       active = false;
     };
   }, [city, loadKey]);
+
+  // Saved can change on another tab while Explore remains mounted.
+  useEffect(() => {
+    if (savedRefreshKey === 0 && savedChanges === 0) return;
+    let active = true;
+    const revision = ++savedRevision.current;
+    callApi('listSavedPlaces', {})
+      .then(({ saved }) => {
+        if (active && revision === savedRevision.current) {
+          setSavedRefreshError('');
+          setSavedPlaces(new Map(saved.map((item) => [item.place.id, item])));
+          setSaveAction((current) =>
+            current.pending ? current : { placeId: '', pending: '', notice: '', failed: false },
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setSavedRefreshError('Could not refresh Saved. Tap Refresh to try again.');
+      });
+    return () => {
+      active = false;
+    };
+  }, [savedRefreshKey, refresh, savedChanges]);
 
   useEffect(() => {
     if (!text) return;
@@ -211,6 +248,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
         else next.delete(placeId);
         return next;
       });
+      notifySavedPlacesChanged('explore');
       setSaveAction({
         placeId,
         pending: '',
@@ -235,7 +273,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
     }
   }
 
-  const select = useCallback((place: PlaceSummary) => {
+  const showPlace = useCallback((place: PlaceSummary) => {
     Keyboard.dismiss();
     setSelected(place);
     setPanelExpanded(true);
@@ -250,14 +288,30 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
     }
   }, []);
 
+  // A newer manual choice wins even if an older navigation request resolves before React rerenders.
+  const cancelPlaceRequest = useCallback(() => {
+    placeRequestVersion.current += 1;
+    setPlaceRequestError('');
+    if (requestedPlaceId) onPlaceRequestHandled?.();
+  }, [requestedPlaceId, onPlaceRequestHandled]);
+
+  const select = useCallback(
+    (place: PlaceSummary) => {
+      cancelPlaceRequest();
+      showPlace(place);
+    },
+    [cancelPlaceRequest, showPlace],
+  );
+
   // Postcards currently shows Seattle's catalog. Clear incompatible map filters
   // before opening its place, and consume the request so it can be opened again.
   useEffect(() => {
     if (!requestedPlaceId) return;
     let active = true;
+    const version = ++placeRequestVersion.current;
     callApi('listPlaces', { city: 'Seattle' })
       .then(({ places: catalog }) => {
-        if (!active) return;
+        if (!active || version !== placeRequestVersion.current) return;
         const place = catalog.find((item) => item.id === requestedPlaceId);
         setPlaceRequestError('');
         setSelected(null);
@@ -269,23 +323,26 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
           setSavedOnly(false);
           setEditingCity(false);
           setRefresh((value) => value + 1);
-          select(place);
+          showPlace(place);
         } else {
           setPlaceRequestError('This place is no longer available in the Seattle catalog.');
         }
         onPlaceRequestHandled?.();
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || version !== placeRequestVersion.current) return;
         setSelected(null);
-        setPlaceRequestError('Could not open this place. Return to Postcards and try again.');
+        setPlaceRequestError(
+          'Could not open this place. Return to Postcards or Saved and try again.',
+        );
         onPlaceRequestHandled?.();
       });
     return () => {
       active = false;
     };
-  }, [requestedPlaceId, onPlaceRequestHandled, select]);
+  }, [requestedPlaceId, onPlaceRequestHandled, showPlace]);
   function zoom(factor: number) {
+    cancelPlaceRequest();
     region.current = {
       ...region.current,
       latitudeDelta: Math.max(0.0005, Math.min(140, region.current.latitudeDelta * factor)),
@@ -296,6 +353,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
   function applyCity() {
     const next = cityDraft.trim().replace(/\s+/g, ' ');
     if (!next) return;
+    cancelPlaceRequest();
     Keyboard.dismiss();
     setCity(next);
     setEditingCity(false);
@@ -333,6 +391,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
             accessibilityLabel={`Change city: ${city}`}
             accessibilityState={{ expanded: editingCity }}
             onPress={() => {
+              cancelPlaceRequest();
               setCityDraft(city);
               setEditingCity(!editingCity);
             }}
@@ -349,11 +408,9 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
             <Text style={styles.link}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
           </Pressable>
         </View>
-        {(getApiMode() === 'fixtures' || process.env.EXPO_PUBLIC_EMULATOR_HOST) && (
-          <Text style={styles.modeLabel}>
-            {getApiMode() === 'fixtures'
-              ? 'Demo data · temporary saves'
-              : 'Demo data · places and details unverified'}
+        {savedRefreshError !== '' && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {savedRefreshError}
           </Text>
         )}
         {signOutError !== '' && (
@@ -407,7 +464,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
               showsMyLocationButton={false}
               onMapReady={() => {
                 mapReady.current = true;
-                if (selected) select(selected);
+                if (selected) showPlace(selected);
                 else fitPlaces(visible);
               }}
               onRegionChangeComplete={(next) => {
@@ -450,7 +507,10 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                 accessibilityRole="button"
                 accessibilityLabel="Show all visible places on map"
                 disabled={pins.length === 0 || loading}
-                onPress={() => fitPlaces(visible)}
+                onPress={() => {
+                  cancelPlaceRequest();
+                  fitPlaces(visible);
+                }}
                 style={styles.mapButton}
               >
                 <Text style={styles.link}>Fit</Text>
@@ -478,7 +538,9 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                     : `${visible.length} ${visible.length === 1 ? 'place' : 'places'}`
             }
           >
-            {selected ? (
+            {openingPlace ? (
+              <ActivityIndicator accessibilityLabel="Opening place" color={colors.primary} />
+            ) : selected ? (
               <PlaceDetails
                 key={selected.id}
                 place={selected}
@@ -502,7 +564,10 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                     value={query}
                     maxLength={200}
                     onFocus={() => setPanelExpanded(true)}
-                    onChangeText={setQuery}
+                    onChangeText={(value) => {
+                      cancelPlaceRequest();
+                      setQuery(value);
+                    }}
                     autoCorrect={false}
                     returnKeyType="search"
                     onSubmitEditing={() => Keyboard.dismiss()}
@@ -512,7 +577,10 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Clear search"
-                      onPress={() => setQuery('')}
+                      onPress={() => {
+                        cancelPlaceRequest();
+                        setQuery('');
+                      }}
                       style={styles.textButton}
                     >
                       <Text style={styles.link}>Clear</Text>
@@ -522,6 +590,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                     accessibilityRole="button"
                     accessibilityLabel="Refresh places and saves"
                     onPress={() => {
+                      cancelPlaceRequest();
                       setRefresh((value) => value + 1);
                       setSearchRetry((value) => value + 1);
                     }}
@@ -542,6 +611,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                       accessibilityLabel={`Saved · ${savedPlaces.size}`}
                       accessibilityState={{ selected: savedOnly }}
                       onPress={() => {
+                        cancelPlaceRequest();
                         setSavedOnly(!savedOnly);
                         setRefresh((value) => value + 1);
                         setPanelExpanded(true);
@@ -555,7 +625,10 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                     <Pressable
                       accessibilityRole="button"
                       accessibilityState={{ selected: category === null }}
-                      onPress={() => setCategory(null)}
+                      onPress={() => {
+                        cancelPlaceRequest();
+                        setCategory(null);
+                      }}
                       style={[styles.chip, category === null && styles.activeChip]}
                     >
                       <Text style={[styles.chipText, category === null && styles.activeText]}>
@@ -569,6 +642,7 @@ export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }
                         accessibilityLabel={`Filter category: ${label(item)}`}
                         accessibilityState={{ selected: category === item }}
                         onPress={() => {
+                          cancelPlaceRequest();
                           setCategory(category === item ? null : item);
                           setPanelExpanded(true);
                         }}
@@ -696,7 +770,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2.5,
   },
   title: { fontFamily: serif, color: colors.ink, fontSize: 27, fontWeight: '700' },
-  modeLabel: { color: colors.muted, fontSize: 11, paddingHorizontal: 18, paddingBottom: 8 },
   cityForm: { paddingHorizontal: 18, paddingBottom: 8, flexDirection: 'row', gap: 8 },
   searchRow: {
     flexDirection: 'row',

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
-import { callApi, getApiMode } from '../../api';
+import { callApi } from '../../api';
 import { PostcardRecommendation } from './postcardRecommendation';
 
 export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: string) => void }) {
@@ -10,7 +10,6 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const demoData = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
 
   useEffect(() => {
     let active = true;
@@ -35,11 +34,6 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
         <Text accessibilityRole="header" style={styles.title}>
           Postcards from Seattle
         </Text>
-        {demoData && (
-          <Text style={styles.notice}>
-            Demo postcards · photos, addresses and recommendations unverified
-          </Text>
-        )}
         <Pressable
           accessibilityRole="button"
           disabled={loading}
