@@ -6,6 +6,7 @@ import { PLACE_PHOTOS } from './placePhotos';
 
 interface Props {
   recommendation: RecommendationView;
+  onOpenPlace: (placeId: string) => void;
 }
 
 //colors athena used
@@ -33,7 +34,7 @@ function firstSentence(text: string): string {
   return match ? match[0].trim() : text;
 }
 
-export function PostcardRecommendation({ recommendation }: Props) {
+export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
   const [showBack, setShowBack] = useState(false);
 
   const name = recommendation.author?.name ?? 'A fellow traveler';
@@ -62,7 +63,12 @@ export function PostcardRecommendation({ recommendation }: Props) {
       </View>
 
       {/* the postcard */}
-      <Pressable onPress={() => setShowBack(!showBack)} style={styles.postcard}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${showBack ? 'Show photo for' : 'Read postcard for'} ${recommendation.place.name} by ${name}`}
+        onPress={() => setShowBack(!showBack)}
+        style={styles.postcard}
+      >
         {showBack ? (
           <View style={styles.back}>
             {Array.from({ length: 7 }, (_, index) => (
@@ -114,10 +120,15 @@ export function PostcardRecommendation({ recommendation }: Props) {
       </Pressable>
 
       {/* footer */}
-      <View style={styles.footer}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`See place: ${recommendation.place.name}, recommended by ${name}`}
+        onPress={() => onOpenPlace(recommendation.place.id)}
+        style={styles.footer}
+      >
         <Text style={styles.placeName}>{recommendation.place.name}</Text>
         <Text style={styles.seePlace}>See place ›</Text>
-      </View>
+      </Pressable>
       <Text style={styles.category}>{recommendation.place.category}</Text>
     </View>
   );
@@ -320,12 +331,15 @@ const styles = StyleSheet.create({
 
   //footer
   footer: {
+    minHeight: 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     marginTop: 4,
   },
   placeName: {
+    flex: 1,
+    marginRight: 10,
     color: TEXT,
     fontSize: 24,
     fontFamily: SERIF,

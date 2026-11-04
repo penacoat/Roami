@@ -44,6 +44,8 @@ const hasCoordinates = (place: PlaceSummary) =>
 
 interface Props {
   onSignOut: () => Promise<void>;
+  requestedPlaceId?: string;
+  onPlaceRequestHandled?: () => void;
 }
 interface SearchState {
   key: string;
@@ -51,7 +53,7 @@ interface SearchState {
   status: 'ready' | 'error';
 }
 
-export function MapScreen({ onSignOut }: Props) {
+export function MapScreen({ onSignOut, requestedPlaceId, onPlaceRequestHandled }: Props) {
   const map = useRef<MapView>(null);
   const region = useRef(SEATTLE);
   const mapReady = useRef(false);
@@ -78,6 +80,7 @@ export function MapScreen({ onSignOut }: Props) {
   const [search, setSearch] = useState<SearchState | null>(null);
   const [searchRetry, setSearchRetry] = useState(0);
   const [signOutError, setSignOutError] = useState('');
+  const [placeRequestError, setPlaceRequestError] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(600);
@@ -232,7 +235,7 @@ export function MapScreen({ onSignOut }: Props) {
     }
   }
 
-  function select(place: PlaceSummary) {
+  const select = useCallback((place: PlaceSummary) => {
     Keyboard.dismiss();
     setSelected(place);
     setPanelExpanded(true);
@@ -245,7 +248,43 @@ export function MapScreen({ onSignOut }: Props) {
       };
       map.current?.animateToRegion(region.current, 250);
     }
-  }
+  }, []);
+
+  // Postcards currently shows Seattle's catalog. Clear incompatible map filters
+  // before opening its place, and consume the request so it can be opened again.
+  useEffect(() => {
+    if (!requestedPlaceId) return;
+    let active = true;
+    callApi('listPlaces', { city: 'Seattle' })
+      .then(({ places: catalog }) => {
+        if (!active) return;
+        const place = catalog.find((item) => item.id === requestedPlaceId);
+        setPlaceRequestError('');
+        setSelected(null);
+        if (place) {
+          setCity('Seattle');
+          setCityDraft('Seattle');
+          setQuery('');
+          setCategory(null);
+          setSavedOnly(false);
+          setEditingCity(false);
+          setRefresh((value) => value + 1);
+          select(place);
+        } else {
+          setPlaceRequestError('This place is no longer available in the Seattle catalog.');
+        }
+        onPlaceRequestHandled?.();
+      })
+      .catch(() => {
+        if (!active) return;
+        setSelected(null);
+        setPlaceRequestError('Could not open this place. Return to Postcards and try again.');
+        onPlaceRequestHandled?.();
+      });
+    return () => {
+      active = false;
+    };
+  }, [requestedPlaceId, onPlaceRequestHandled, select]);
   function zoom(factor: number) {
     region.current = {
       ...region.current,
@@ -277,7 +316,7 @@ export function MapScreen({ onSignOut }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.grow}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -322,6 +361,11 @@ export function MapScreen({ onSignOut }: Props) {
             {signOutError}
           </Text>
         )}
+        {placeRequestError !== '' && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {placeRequestError}
+          </Text>
+        )}
         {editingCity && (
           <View style={styles.cityForm}>
             <TextInput
@@ -363,7 +407,8 @@ export function MapScreen({ onSignOut }: Props) {
               showsMyLocationButton={false}
               onMapReady={() => {
                 mapReady.current = true;
-                fitPlaces(visible);
+                if (selected) select(selected);
+                else fitPlaces(visible);
               }}
               onRegionChangeComplete={(next) => {
                 region.current = next;

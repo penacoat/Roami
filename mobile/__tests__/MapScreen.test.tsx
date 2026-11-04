@@ -37,6 +37,20 @@ beforeEach(() => {
   resetFixtures();
 });
 
+it('explains an unavailable postcard target instead of opening an unrelated place', async () => {
+  const consumed = jest.fn();
+  await render(
+    <MapScreen
+      onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)}
+      requestedPlaceId="removed-place"
+      onPlaceRequestHandled={consumed}
+    />,
+  );
+  await screen.findByText('This place is no longer available in the Seattle catalog.');
+  expect(screen.queryByLabelText('Close place details')).toBeNull();
+  expect(consumed).toHaveBeenCalledTimes(1);
+});
+
 it('opens a map pin, saves its recommendation source, and finds it in Saved', async () => {
   await render(
     <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
