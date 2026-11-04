@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RecommendationView } from '@roami/shared';
-import { PLACE_ADDRESSES } from './placeAddresses';
+import { getApiMode } from '../../api';
 import { PLACE_PHOTOS } from './placePhotos';
 
 interface Props {
   recommendation: RecommendationView;
+  onOpenPlace: (placeId: string) => void;
 }
 
 //colors athena used
@@ -33,13 +34,13 @@ function firstSentence(text: string): string {
   return match ? match[0].trim() : text;
 }
 
-export function PostcardRecommendation({ recommendation }: Props) {
+export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
   const [showBack, setShowBack] = useState(false);
 
   const name = recommendation.author?.name ?? 'A fellow traveler';
   const date = formatDate(recommendation.visitDate ?? recommendation.createdAt);
-  const address = PLACE_ADDRESSES[recommendation.place.id];
   const photo = PLACE_PHOTOS[recommendation.place.id];
+  const sample = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
 
   return (
     <View style={styles.postLayout}>
@@ -51,9 +52,10 @@ export function PostcardRecommendation({ recommendation }: Props) {
           </View>
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.username}>{name} sent you a postcard</Text>
+          <Text style={styles.username}>Postcard from {name}</Text>
           <Text style={styles.meta}>
-            @{name.toLowerCase()} · {date}
+            {sample ? 'Sample postcard · ' : ''}
+            {date}
           </Text>
         </View>
         <View style={styles.smallStamp}>
@@ -62,7 +64,12 @@ export function PostcardRecommendation({ recommendation }: Props) {
       </View>
 
       {/* the postcard */}
-      <Pressable onPress={() => setShowBack(!showBack)} style={styles.postcard}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${showBack ? 'Show photo for' : 'Read postcard for'} ${recommendation.place.name} by ${name}`}
+        onPress={() => setShowBack(!showBack)}
+        style={styles.postcard}
+      >
         {showBack ? (
           <View style={styles.back}>
             {Array.from({ length: 7 }, (_, index) => (
@@ -86,8 +93,7 @@ export function PostcardRecommendation({ recommendation }: Props) {
               </View>
               <View>
                 <Text style={styles.addressName}>{recommendation.place.name}</Text>
-                <Text style={styles.address}>{address?.street ?? 'Seattle'}</Text>
-                <Text style={styles.address}>{address?.cityLine ?? 'Washington'}</Text>
+                <Text style={styles.address}>Seattle</Text>
               </View>
             </View>
           </View>
@@ -96,6 +102,7 @@ export function PostcardRecommendation({ recommendation }: Props) {
             <View style={styles.photoArea}>
               {photo ? <Image source={{ uri: photo }} style={styles.photo} /> : null}
               {photo ? <View style={styles.photoShade} /> : null}
+              {photo ? <Text style={styles.photoLabel}>Illustrative photo</Text> : null}
               <Text style={styles.frontPicture} numberOfLines={2}>
                 {recommendation.place.name}
               </Text>
@@ -114,16 +121,32 @@ export function PostcardRecommendation({ recommendation }: Props) {
       </Pressable>
 
       {/* footer */}
-      <View style={styles.footer}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`See place: ${recommendation.place.name}, recommended by ${name}`}
+        onPress={() => onOpenPlace(recommendation.place.id)}
+        style={styles.footer}
+      >
         <Text style={styles.placeName}>{recommendation.place.name}</Text>
         <Text style={styles.seePlace}>See place ›</Text>
-      </View>
+      </Pressable>
       <Text style={styles.category}>{recommendation.place.category}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  photoLabel: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    fontSize: 10,
+    color: CARD,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
   postLayout: {
     backgroundColor: PAPER,
     padding: 16,
@@ -320,12 +343,15 @@ const styles = StyleSheet.create({
 
   //footer
   footer: {
+    minHeight: 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     marginTop: 4,
   },
   placeName: {
+    flex: 1,
+    marginRight: 10,
     color: TEXT,
     fontSize: 24,
     fontFamily: SERIF,

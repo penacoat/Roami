@@ -1,11 +1,9 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Stack } from 'expo-router';
 
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
-import { AuthScreen } from './src/auth/AuthScreens';
-import { signOut } from './src/auth/AuthService';
-import { MapScreen } from './src/screens/MapScreen';
 import { callApi } from './src/api';
 import { registerServices } from './src/services';
 
@@ -36,11 +34,16 @@ function Root() {
     );
   }
 
-  if (!user) {
-    return <AuthScreen />;
-  }
-
-  return <MapScreen key={user.uid} onSignOut={signOut} />;
+  return (
+    <Stack key={user?.uid ?? 'signed-out'} screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={Boolean(user)}>
+        <Stack.Screen name="(tabs)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!user}>
+        <Stack.Screen name="sign-in" />
+      </Stack.Protected>
+    </Stack>
+  );
 }
 
 export default function App() {

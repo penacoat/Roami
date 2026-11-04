@@ -41,7 +41,7 @@ export function PlaceDetails({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [linkError, setLinkError] = useState('');
-  const demoData = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
+  const sampleData = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
   const sourceLinks = [
     ...new Set(
       recommendations
@@ -105,8 +105,8 @@ export function PlaceDetails({
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.hours}>
-          {demoData
-            ? 'Demo hours · not verified'
+          {sampleData
+            ? 'Hours not verified'
             : place.openingHours?.trim()
               ? `Reported hours · ${place.openingHours}`
               : 'Hours not provided'}
@@ -184,7 +184,7 @@ export function PlaceDetails({
             ) : (
               <>
                 <Text style={styles.author}>
-                  {demoData ? 'Demo recommendation by' : 'Recommended by'}{' '}
+                  {sampleData ? 'Sample recommendation ·' : 'Recommended by'}{' '}
                   {recommendation.author?.name ?? 'a traveler'}
                 </Text>
                 <Text style={styles.description}>{recommendation.description}</Text>
