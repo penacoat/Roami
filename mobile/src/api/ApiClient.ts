@@ -1,4 +1,5 @@
 import type { ApiErrorCode, ApiFunctionName, ApiRequest, ApiResponse } from '@roami/shared';
+import { isFrontendPreview } from '../config/preview';
 
 import { fixtureHandlers } from './fixtureHandlers';
 import { ApiError, type ApiHandlers } from './types';
@@ -11,7 +12,8 @@ import { ApiError, type ApiHandlers } from './types';
  */
 export type ApiMode = 'fixtures' | 'live';
 
-const mode: ApiMode = process.env.EXPO_PUBLIC_API_MODE === 'live' ? 'live' : 'fixtures';
+const mode: ApiMode =
+  !isFrontendPreview && process.env.EXPO_PUBLIC_API_MODE === 'live' ? 'live' : 'fixtures';
 const live: Partial<ApiHandlers> = {};
 const warned = new Set<string>();
 

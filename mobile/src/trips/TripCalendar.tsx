@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { dateKey } from './tripDraft';
 import { tripTheme as theme } from './tripTheme';
+import { buttonOutline } from '../components/buttonStyles';
 
 interface Props {
   startDate: string;
@@ -73,7 +74,12 @@ export function TripCalendar({ startDate, endDate, onChange }: Props) {
               })}
               accessibilityState={{ selected: selected || inRange }}
               onPress={() => select(key)}
-              style={[styles.cell, inRange && styles.inRange, selected && styles.selected]}
+              style={[
+                styles.cell,
+                styles.dayButton,
+                inRange && styles.inRange,
+                selected && styles.selected,
+              ]}
             >
               <Text style={[styles.day, selected && styles.selectedText]}>{day}</Text>
             </Pressable>
@@ -81,9 +87,7 @@ export function TripCalendar({ startDate, endDate, onChange }: Props) {
         })}
       </View>
       <Text accessibilityLiveRegion="polite" style={styles.hint}>
-        {choosingEnd
-          ? 'Now choose your return date. Tap the same day for a day trip.'
-          : 'Tap a departure date, then a return date.'}
+        {choosingEnd ? 'Choose your return date.' : 'Choose your departure date.'}
       </Text>
     </View>
   );
@@ -99,15 +103,22 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  arrow: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  arrow: {
+    ...buttonOutline,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   arrowText: { color: theme.ink, fontSize: 30 },
   month: { color: theme.text, fontFamily: theme.serif, fontSize: 17, fontWeight: '700' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: '14.285714%', minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  dayButton: { ...buttonOutline },
   weekday: { color: theme.muted, fontSize: 12, fontWeight: '600' },
   day: { color: theme.text, fontSize: 15 },
   inRange: { backgroundColor: theme.butter },
-  selected: { backgroundColor: theme.ink, borderRadius: 24 },
+  selected: { backgroundColor: theme.ink, borderColor: theme.ink, borderRadius: 10 },
   selectedText: { color: '#FFFFFF', fontWeight: '700' },
   hint: { color: theme.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
 });

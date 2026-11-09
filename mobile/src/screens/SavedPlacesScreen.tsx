@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SavedPlaceView } from '@roami/shared';
 import { callApi } from '../api';
+import { buttonOutline } from '../components/buttonStyles';
+import { AddToItinerary } from '../components/AddToItinerary';
 import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
@@ -134,6 +136,9 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
                 <Text style={styles.placeName}>{item.place.name}</Text>
                 <Text style={styles.link}>See place →</Text>
               </Pressable>
+              <View style={{ marginTop: 10 }}>
+                <AddToItinerary place={item.place} />
+              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Unsave ${item.place.name}`}
@@ -173,18 +178,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     padding: 16,
   },
-  open: { gap: 6 },
+  open: { ...buttonOutline, gap: 6, padding: 12 },
   category: { color: colors.red, fontSize: 12 },
   placeName: {
     color: colors.ink,
     fontSize: 22,
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
-  action: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  action: {
+    ...buttonOutline,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
   link: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   message: { color: colors.muted, fontSize: 14, lineHeight: 21 },
   empty: { gap: 16 },
   primary: {
+    ...buttonOutline,
+    borderColor: colors.primary,
     backgroundColor: colors.primary,
     minHeight: 48,
     borderRadius: 12,

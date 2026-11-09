@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../screens/map/theme';
+import { buttonOutline } from '../../components/buttonStyles';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 const icons: Record<string, readonly [IconName, IconName]> = {
@@ -32,6 +33,7 @@ export default function AppTabs() {
         },
         tabBarLabelPosition: 'below-icon',
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarItemStyle: { ...buttonOutline, borderRadius: 12, marginHorizontal: 4 },
         tabBarIcon: ({ focused }) => (
           <View
             accessibilityElementsHidden
@@ -57,7 +59,7 @@ export default function AppTabs() {
     >
       <Tabs.Screen name="index" options={{ title: 'Explore' }} />
       <Tabs.Screen name="postcards" options={{ title: 'Postcards' }} />
-      <Tabs.Screen name="trip" options={{ title: 'Build Trip' }} />
+      <Tabs.Screen name="trip" options={{ title: 'Itineraries' }} />
       <Tabs.Screen name="saved" options={{ title: 'Saved' }} />
     </Tabs>
   );

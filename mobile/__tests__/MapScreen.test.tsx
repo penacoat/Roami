@@ -322,7 +322,7 @@ it('does not invent a venue link when the catalog supplies none', async () => {
   );
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
-  await screen.findByText('No source link provided.');
+  await waitFor(() => expect(screen.queryByLabelText('Loading recommendations')).toBeNull());
   expect(screen.queryAllByRole('link')).toHaveLength(0);
 });
 
@@ -338,7 +338,7 @@ it('omits malformed and non-web source URLs', async () => {
   );
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
-  await screen.findByText('No source link provided.');
+  await waitFor(() => expect(screen.queryByLabelText('Loading recommendations')).toBeNull());
   expect(screen.queryAllByRole('link')).toHaveLength(0);
 });
 

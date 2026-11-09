@@ -15,9 +15,9 @@
     "firebase": "^13.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-native": "0.88.0",
+    "react-native": "0.88.1",
     "react-native-maps": "1.29.11",
-    "react-native-safe-area-context": "~5.10.1",
+    "react-native-safe-area-context": "~5.11.1",
     "react-native-screens": "~4.30.1"
   },
   "devDependencies": {
@@ -37,7 +37,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
+    "preview:ios": "EXPO_PUBLIC_FRONTEND_PREVIEW=true expo run:ios",
     "web": "expo start --web",
     "test": "jest",
     "test:ci": "jest --runInBand",

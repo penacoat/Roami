@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { buttonOutline } from '../buttonStyles';
 import type { RecommendationView } from '@roami/shared';
 import { getApiMode } from '../../api';
 import { PLACE_PHOTOS } from './placePhotos';
@@ -130,7 +131,6 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
         <Text style={styles.placeName}>{recommendation.place.name}</Text>
         <Text style={styles.seePlace}>See place ›</Text>
       </Pressable>
-      <Text style={styles.category}>{recommendation.place.category}</Text>
     </View>
   );
 }
@@ -215,6 +215,7 @@ const styles = StyleSheet.create({
 
   //postcard
   postcard: {
+    ...buttonOutline,
     height: 300,
     overflow: 'hidden',
   },
@@ -266,10 +267,9 @@ const styles = StyleSheet.create({
     paddingRight: 80,
   },
   flipButton: {
+    ...buttonOutline,
     alignSelf: 'flex-start',
     backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: LINE,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
@@ -343,11 +343,13 @@ const styles = StyleSheet.create({
 
   //footer
   footer: {
+    ...buttonOutline,
     minHeight: 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginTop: 4,
+    alignItems: 'center',
+    padding: 12,
+    marginTop: 10,
   },
   placeName: {
     flex: 1,
@@ -360,12 +362,6 @@ const styles = StyleSheet.create({
     color: INK,
     fontSize: 15,
     fontWeight: '700',
-  },
-  category: {
-    color: MUTED,
-    fontSize: 14,
-    marginTop: 4,
-    textTransform: 'capitalize',
   },
 
   //back of card

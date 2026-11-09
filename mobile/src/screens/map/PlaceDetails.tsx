@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 
 import { callApi, getApiMode } from '../../api';
+import { buttonOutline } from '../../components/buttonStyles';
+import { AddToItinerary } from '../../components/AddToItinerary';
 import { colors } from './theme';
 
 interface Props {
@@ -126,9 +128,6 @@ export function PlaceDetails({
             <Text style={styles.link}>Source · {host} ↗</Text>
           </Pressable>
         ))}
-        {!loading && !error && sourceLinks.length === 0 && (
-          <Text style={styles.hours}>No source link provided.</Text>
-        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={saved ? 'Unsave place' : 'Save place'}
@@ -144,6 +143,7 @@ export function PlaceDetails({
             {pending || (saved ? 'Saved ✓ · Unsave' : 'Save place')}
           </Text>
         </Pressable>
+        <AddToItinerary place={place} />
         {notice !== '' && (
           <Text
             accessibilityRole={saveFailed ? 'alert' : undefined}
@@ -247,11 +247,25 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
     color: colors.ink,
   },
-  close: { minWidth: 72, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  close: {
+    ...buttonOutline,
+    minWidth: 72,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   body: { flexShrink: 1 },
   bodyContent: { padding: 20, paddingTop: 10, gap: 12 },
   hours: { color: colors.muted, fontSize: 13, lineHeight: 20 },
-  save: { backgroundColor: colors.primary, padding: 14, borderRadius: 12, alignItems: 'center' },
+  save: {
+    ...buttonOutline,
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
   saved: { backgroundColor: '#4D685E' },
   saveText: { color: colors.white, fontWeight: '600' },
   postcard: {
@@ -265,7 +279,13 @@ const styles = StyleSheet.create({
   author: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   description: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   tags: { color: colors.muted, fontSize: 12 },
-  retry: { minHeight: 44, justifyContent: 'center' },
+  retry: {
+    ...buttonOutline,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   link: { color: colors.ink, fontWeight: '600', fontSize: 13 },
   notice: { color: colors.ink, fontSize: 13, lineHeight: 20 },
 });

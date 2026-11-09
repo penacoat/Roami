@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated, Keyboard, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from './theme';
+import { buttonOutline } from '../../components/buttonStyles';
 
 interface Props {
   availableHeight: number;
@@ -107,7 +108,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
   },
-  handle: { height: 54, alignItems: 'center', paddingTop: 7, paddingHorizontal: 18, gap: 8 },
+  handle: {
+    ...buttonOutline,
+    borderRadius: 20,
+    height: 54,
+    alignItems: 'center',
+    paddingTop: 7,
+    paddingHorizontal: 18,
+    gap: 8,
+  },
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border },
   heading: {
     width: '100%',

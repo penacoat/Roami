@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
 import { callApi } from '../../api';
+import { buttonOutline } from '../buttonStyles';
 import { PostcardRecommendation } from './postcardRecommendation';
 
 export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: string) => void }) {
@@ -82,6 +83,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   notice: { color: '#505A72', fontSize: 13, lineHeight: 20 },
-  refresh: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  refresh: {
+    ...buttonOutline,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
   action: { color: '#283A70', fontSize: 14, fontWeight: '600' },
 });

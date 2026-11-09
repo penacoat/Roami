@@ -17,6 +17,7 @@ import MapView, { Marker, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { callApi } from '../api';
+import { buttonOutline } from '../components/buttonStyles';
 import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
@@ -791,18 +792,25 @@ const styles = StyleSheet.create({
   filterRow: { height: 48 },
   chips: { paddingHorizontal: 14, gap: 7, paddingBottom: 6 },
   chip: {
+    ...buttonOutline,
     height: 40,
     borderRadius: 22,
     paddingHorizontal: 12,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.paper,
   },
   activeChip: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { color: colors.ink, fontSize: 12, fontWeight: '600' },
   activeText: { color: colors.white },
-  textButton: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
+  textButton: {
+    ...buttonOutline,
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
   link: { color: colors.primary, fontSize: 12, fontWeight: '600' },
   caption: { color: colors.muted, fontSize: 11, lineHeight: 16 },
   notice: { paddingHorizontal: 18, paddingVertical: 8 },
@@ -810,9 +818,8 @@ const styles = StyleSheet.create({
   mapArea: { flex: 1, minHeight: 0 },
   mapTools: { position: 'absolute', right: 12, top: 12, gap: 4, flexDirection: 'row' },
   mapButton: {
+    ...buttonOutline,
     backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 9,
     width: 44,
     height: 44,
@@ -830,12 +837,11 @@ const styles = StyleSheet.create({
   },
   cards: { paddingHorizontal: 14, paddingBottom: 16, gap: 8 },
   card: {
+    ...buttonOutline,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 12,
     backgroundColor: colors.white,
   },

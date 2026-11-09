@@ -5,9 +5,10 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
-import { app } from '../auth/firebase';
+import { getFirebaseApp } from '../auth/firebase';
 
 function createFirestore(): Firestore {
+  const app = getFirebaseApp();
   let instance: Firestore;
   try {
     // React Native sometimes cannot hold a streaming connection open, so let

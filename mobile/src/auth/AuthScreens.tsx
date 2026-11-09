@@ -11,6 +11,7 @@ import {
 
 import { callApi } from '../api';
 import { signIn, signUp } from './AuthService';
+import { buttonOutline } from '../components/buttonStyles';
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
@@ -87,7 +88,12 @@ export function AuthScreen() {
 
       {error !== '' && <Text style={styles.error}>{error}</Text>}
 
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={submitting}>
+      <Pressable
+        accessibilityRole="button"
+        style={styles.button}
+        onPress={handleSubmit}
+        disabled={submitting}
+      >
         {submitting ? (
           <ActivityIndicator color="#fff" />
         ) : (
@@ -96,14 +102,14 @@ export function AuthScreen() {
       </Pressable>
 
       <Pressable
+        accessibilityRole="button"
+        style={styles.secondary}
         onPress={() => {
           setMode(isSignUp ? 'signIn' : 'signUp');
           setError('');
         }}
       >
-        <Text style={styles.link}>
-          {isSignUp ? 'Already have an account? Sign in' : 'New to Roami? Create an account'}
-        </Text>
+        <Text style={styles.link}>{isSignUp ? 'Back to sign in' : 'Create an account'}</Text>
       </Pressable>
     </KeyboardAvoidingView>
   );
@@ -123,6 +129,8 @@ const styles = StyleSheet.create({
   },
   error: { color: '#c0392b', marginBottom: 12 },
   button: {
+    ...buttonOutline,
+    borderColor: '#175DB8',
     backgroundColor: '#1a73e8',
     borderRadius: 8,
     padding: 14,
@@ -130,5 +138,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  secondary: {
+    ...buttonOutline,
+    minHeight: 44,
+    padding: 12,
+    justifyContent: 'center',
+  },
   link: { textAlign: 'center', color: '#1a73e8' },
 });

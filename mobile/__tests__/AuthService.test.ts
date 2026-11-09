@@ -2,9 +2,12 @@ import { beforeEach, expect, it, jest } from '@jest/globals';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 import { signIn } from '../src/auth/AuthService';
-import { auth } from '../src/auth/firebase';
+import { getFirebaseAuth } from '../src/auth/firebase';
 
-jest.mock('../src/auth/firebase', () => ({ auth: {} }));
+jest.mock('../src/auth/firebase', () => {
+  const auth = {};
+  return { getFirebaseAuth: () => auth };
+});
 jest.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: jest.fn(),
 }));
@@ -20,7 +23,7 @@ it('trims the email, preserves the password, and returns the signed-in user', as
   mockSignIn.mockResolvedValue({ user } as Awaited<ReturnType<typeof signInWithEmailAndPassword>>);
 
   await expect(signIn('  roamer@example.com  ', ' password ')).resolves.toEqual(user);
-  expect(mockSignIn).toHaveBeenCalledWith(auth, 'roamer@example.com', ' password ');
+  expect(mockSignIn).toHaveBeenCalledWith(getFirebaseAuth(), 'roamer@example.com', ' password ');
 });
 
 it('turns an invalid-credential error into a helpful message', async () => {

@@ -17,7 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import type { Trip } from '@roami/shared';
-import { callApi, getApiMode } from '../api';
+import { callApi } from '../api';
+import { buttonOutline } from '../components/buttonStyles';
 import { TripCalendar } from '../trips/TripCalendar';
 import { formatDate, tripDays, validateTripDraft, type TripDraft } from '../trips/tripDraft';
 import { tripTheme as theme } from '../trips/tripTheme';
@@ -33,9 +34,11 @@ const destinations = ['Seattle', 'Portland', 'San Francisco'];
 
 interface Props {
   onSignOut: () => Promise<void>;
+  onCreated?: (tripId: string) => void;
+  onBack?: () => void;
 }
 
-export function TripCreationScreen({ onSignOut }: Props) {
+export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
   const [draft, setDraft] = useState<TripDraft>(initialDraft);
   const [createdTrip, setCreatedTrip] = useState<Trip | null>(null);
   const [error, setError] = useState('');
@@ -70,6 +73,7 @@ export function TripCreationScreen({ onSignOut }: Props) {
       });
       setCreatedTrip(result.trip.trip);
       scroll.current?.scrollTo({ y: 0, animated: false });
+      onCreated?.(result.trip.trip.id);
     } catch {
       setError('We couldn’t save your trip. Please try again.');
     } finally {
@@ -101,13 +105,24 @@ export function TripCreationScreen({ onSignOut }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <View style={styles.wordmark}>
-            <View accessible={false} style={styles.globe}>
-              <View style={styles.globeMeridian} />
-              <View style={styles.globeEquator} />
+          {onBack ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              disabled={saving || signingOut}
+              style={styles.signOut}
+            >
+              <Text style={styles.signOutText}>← Itineraries</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.wordmark}>
+              <View accessible={false} style={styles.globe}>
+                <View style={styles.globeMeridian} />
+                <View style={styles.globeEquator} />
+              </View>
+              <Text style={styles.brand}>ROAMI</Text>
             </View>
-            <Text style={styles.brand}>ROAMI</Text>
-          </View>
+          )}
           <Pressable
             accessibilityRole="button"
             onPress={handleSignOut}
@@ -160,9 +175,6 @@ export function TripCreationScreen({ onSignOut }: Props) {
                   Daily hours · {createdTrip.dailyWindow.start}–{createdTrip.dailyWindow.end}
                 </Text>
               </View>
-              <Text style={styles.note}>
-                {getApiMode() === 'fixtures' ? 'Trip created.' : 'Trip saved.'} No places added yet.
-              </Text>
               {error ? (
                 <Text accessibilityRole="alert" style={styles.error}>
                   {error}
@@ -190,9 +202,6 @@ export function TripCreationScreen({ onSignOut }: Props) {
                     <Text accessibilityRole="header" style={styles.title}>
                       Build a trip
                     </Text>
-                    <Text style={styles.subtitle}>
-                      Choose your destination, dates, and daily hours.
-                    </Text>
                   </View>
                 </View>
               </View>
@@ -215,7 +224,6 @@ export function TripCreationScreen({ onSignOut }: Props) {
                   returnKeyType="done"
                   editable={!saving && !signingOut}
                 />
-                <Text style={styles.helper}>Suggestions</Text>
                 <View style={styles.chips}>
                   {destinations.map((city) => (
                     <Pressable
@@ -264,9 +272,8 @@ export function TripCreationScreen({ onSignOut }: Props) {
               <View style={styles.card}>
                 <Text style={styles.sectionNumber}>03 · DAILY HOURS</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
-                  Planning hours
+                  Planning hours · 24h
                 </Text>
-                <Text style={styles.helper}>Choose when each day starts and ends.</Text>
                 <View style={styles.timeRow}>
                   <View style={styles.flex}>
                     <Text style={styles.label}>Start of day</Text>
@@ -297,7 +304,6 @@ export function TripCreationScreen({ onSignOut }: Props) {
                     />
                   </View>
                 </View>
-                <Text style={styles.helper}>24-hour time · 09:00 is 9 AM, 21:00 is 9 PM</Text>
               </View>
             </>
           )}
@@ -378,7 +384,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2.7,
   },
-  signOut: { minHeight: 44, justifyContent: 'center', paddingLeft: 16 },
+  signOut: {
+    ...buttonOutline,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
   signOutText: { color: theme.muted, fontSize: 12, fontWeight: '500' },
   content: {
     width: '100%',
@@ -406,7 +417,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.8,
   },
-  subtitle: { color: theme.muted, fontSize: 13, fontWeight: '500', lineHeight: 21, marginTop: 9 },
   stampText: {
     color: theme.accent,
     fontFamily: theme.serif,
@@ -437,15 +447,13 @@ const styles = StyleSheet.create({
     color: theme.text,
     fontSize: 14,
   },
-  helper: { color: theme.muted, fontSize: 12, fontWeight: '500', lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
+    ...buttonOutline,
     borderRadius: 24,
     minHeight: 44,
     paddingHorizontal: 15,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.line,
   },
   activeChip: { backgroundColor: theme.ink, borderColor: theme.ink },
   chipText: { color: theme.text, fontSize: 12, fontWeight: '500' },
@@ -478,6 +486,8 @@ const styles = StyleSheet.create({
   },
   duration: { color: theme.ink, fontSize: 12, fontWeight: '600', textAlign: 'center' },
   primary: {
+    ...buttonOutline,
+    borderColor: theme.ink,
     minHeight: 50,
     padding: 14,
     borderRadius: 9,
@@ -487,13 +497,6 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
   pressed: { opacity: 0.65 },
-  note: {
-    color: theme.muted,
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 17,
-    textAlign: 'center',
-  },
   error: { color: '#A13D32', fontSize: 13, lineHeight: 20 },
   success: { gap: 22, paddingTop: 12 },
   successIcon: {

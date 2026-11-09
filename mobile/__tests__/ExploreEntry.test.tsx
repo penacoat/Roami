@@ -8,6 +8,8 @@ import AppTabs from '../src/app/(tabs)/_layout';
 import ExploreRoute from '../src/app/(tabs)/index';
 import PostcardsRoute from '../src/app/(tabs)/postcards';
 import NewTripRoute from '../src/app/(tabs)/trip';
+import CreateTripRoute from '../src/app/new-trip';
+import ItineraryRoute from '../src/app/itinerary/[tripId]';
 import SavedRoute from '../src/app/(tabs)/saved';
 import { callApi, resetFixtures } from '../src/api';
 
@@ -72,6 +74,8 @@ it('protects deep links, signs in with upstream UI, switches real screens, opens
       '(tabs)/postcards': PostcardsRoute,
       '(tabs)/trip': NewTripRoute,
       '(tabs)/saved': SavedRoute,
+      'new-trip': CreateTripRoute,
+      'itinerary/[tripId]': ItineraryRoute,
     },
     { initialUrl: '/postcards' },
   );
@@ -116,7 +120,7 @@ it('protects deep links, signs in with upstream UI, switches real screens, opens
   await fireEvent.press(screen.getByLabelText('Postcards, tab, 2 of 4'));
   await fireEvent.press(screen.getByLabelText('See place: Jazz Alley, recommended by Maya'));
   // Complete the place handoff while another tab is focused; only Explore's params should clear.
-  await fireEvent.press(screen.getByLabelText('Build Trip, tab, 3 of 4'));
+  await fireEvent.press(screen.getByLabelText('Itineraries, tab, 3 of 4'));
   await jest.advanceTimersByTimeAsync(250);
   await fireEvent.press(screen.getByLabelText('Explore, tab, 1 of 4'));
   await screen.findByText('Saved ✓ · Unsave');
@@ -137,8 +141,9 @@ it('protects deep links, signs in with upstream UI, switches real screens, opens
   await fireEvent.press(screen.getByLabelText('See place: Jazz Alley, recommended by Maya'));
   await screen.findByLabelText('Change city: Seattle');
   await screen.findByLabelText('Close place details');
-  await fireEvent.press(screen.getByLabelText('Build Trip, tab, 3 of 4'));
+  await fireEvent.press(screen.getByLabelText('Itineraries, tab, 3 of 4'));
   expect(screen).toHavePathname('/trip');
+  await fireEvent.press(await screen.findByRole('button', { name: 'New itinerary' }));
   await screen.findByLabelText('City or destination');
   await fireEvent.press(screen.getByRole('button', { name: 'Seattle' }));
   const today = new Date().toLocaleDateString('en-US', { dateStyle: 'full' });
@@ -147,12 +152,21 @@ it('protects deep links, signs in with upstream UI, switches real screens, opens
   const create = fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
   await jest.advanceTimersByTimeAsync(200);
   await create;
-  await screen.findByText('1 day to explore');
+  await screen.findByRole('button', { name: 'Explore places to add' });
   const listing = callApi('listTrips', {});
   await jest.advanceTimersByTimeAsync(200);
   expect((await listing).trips.some((trip) => trip.city === 'Seattle')).toBe(true);
-  await fireEvent.press(screen.getByLabelText('Explore, tab, 1 of 4'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Explore places to add' }));
+  await fireEvent.press(await screen.findByLabelText('Open Jazz Alley'));
   await screen.findByLabelText('Close place details');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Jazz Alley to an itinerary' }));
+  await fireEvent.press(await screen.findByRole('button', { name: /Seattle.*–/ }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle · Day 1');
+  await fireEvent.press(screen.getByRole('button', { name: 'View itinerary' }));
+  await screen.findByRole('button', { name: 'Open Jazz Alley' });
+  await fireEvent.press(screen.getByRole('button', { name: 'Explore places to add' }));
+  await screen.findByRole('button', { name: 'Sign out' });
   await fireEvent.press(screen.getByRole('button', { name: 'Sign out' }));
   await screen.findByText('Welcome back');
   expect(screen).toHavePathname('/sign-in');
