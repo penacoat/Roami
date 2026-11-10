@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { callApi, getApiMode } from '../../api';
+import { AddToItinerary } from './AddToItinerary';
 import { colors } from './theme';
 
 interface Props {
@@ -144,6 +145,7 @@ export function PlaceDetails({
             {pending || (saved ? 'Saved ✓ · Unsave' : 'Save place')}
           </Text>
         </Pressable>
+        <AddToItinerary place={place} />
         {notice !== '' && (
           <Text
             accessibilityRole={saveFailed ? 'alert' : undefined}
