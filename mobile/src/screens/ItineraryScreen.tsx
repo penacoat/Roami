@@ -285,7 +285,8 @@ export function ItineraryScreen({
                           <Text style={styles.timeText}>
                             {stop.startTime
                               ? formatTimeRange(stop.startTime, stop.visitMinutes)
-                              : 'Set time'}                          </Text>
+                              : 'Set time'}{' '}
+                          </Text>
                         </Pressable>
                         {editingId === stop.id ? (
                           <View style={{ gap: 8 }}>
