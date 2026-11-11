@@ -17,6 +17,11 @@ import { MAX_STOPS_PER_DAY } from '../logic/trips';
 import { tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
+import { DEFAULT_END, DEFAULT_START, formatTimeRange, rangeFromMinutes } from '../trips/stopTime';
+import { TimeRangePicker } from '../trips/TimeRangePicker';
+
+// Length given to a stop added without a time, until the user sets one.
+const DEFAULT_VISIT_MINUTES = 60;
 
 export function AddToItinerary({ place }: { place: PlaceSummary }) {
   const [open, setOpen] = useState(false);
@@ -24,7 +29,10 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
   const [selectedId, setSelectedId] = useState('');
   const [selected, setSelected] = useState<TripView | null>(null);
   const [day, setDay] = useState(1);
-  const [minutes, setMinutes] = useState(60);
+  const [timed, setTimed] = useState(false);
+  const [start, setStart] = useState(DEFAULT_START);
+  const [end, setEnd] = useState(DEFAULT_END);
+  const [timeError, setTimeError] = useState('');
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -58,9 +66,26 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
   const stops = selected?.stops.filter((stop) => stop.day === day) ?? [];
   const duplicate = stops.some((stop) => stop.placeId === place.id);
   const full = stops.length >= MAX_STOPS_PER_DAY;
+  const addedStop = added
+    ? selected?.stops.find((stop) => stop.placeId === place.id && stop.day === day)
+    : undefined;
+
+  // Without a time, the place is added untimed; it can be set later on the itinerary.
+  function readTimes(): { startTime: string | null; visitMinutes: number } | null {
+    if (!timed) return { startTime: null, visitMinutes: DEFAULT_VISIT_MINUTES };
+    const range = rangeFromMinutes(start, end);
+    if (!range.ok) {
+      setTimeError(range.error);
+      return null;
+    }
+    return { startTime: range.startTime, visitMinutes: range.visitMinutes };
+  }
 
   async function add() {
     if (!selected || busy.current || duplicate || full || day > days) return;
+    const times = readTimes();
+    if (!times) return;
+    setTimeError('');
     busy.current = true;
     setPending(true);
     setError('');
@@ -70,7 +95,8 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
         expectedRevision: selected.trip.revision,
         placeId: place.id,
         day,
-        visitMinutes: minutes,
+        startTime: times.startTime,
+        visitMinutes: times.visitMinutes,
       });
       setSelected(result.trip);
       setAdded(true);
@@ -109,7 +135,10 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
           setSelected(null);
           setSelectedId('');
           setDay(1);
-          setMinutes(60);
+          setTimed(false);
+          setStart(DEFAULT_START);
+          setEnd(DEFAULT_END);
+          setTimeError('');
           setAdded(false);
           setError('');
           setOpen(true);
@@ -149,6 +178,9 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
               <>
                 <Text accessibilityLiveRegion="polite" style={styles.text}>
                   Added to {selected.trip.city} · Day {day}
+                  {addedStop?.startTime
+                    ? ` · ${formatTimeRange(addedStop.startTime, addedStop.visitMinutes)}`
+                    : ''}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -200,21 +232,47 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
                     </Pressable>
                   ))}
                 </View>
-                <Text style={styles.text}>Visit length</Text>
-                <View style={styles.wrap}>
-                  {[30, 60, 90, 120].map((value) => (
-                    <Pressable
-                      key={value}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: minutes === value, disabled: pending }}
+                <Text style={styles.text}>Time</Text>
+                <Text style={styles.muted}>Optional. You can set or change it later.</Text>
+                {timed ? (
+                  <>
+                    <TimeRangePicker
+                      start={start}
+                      end={end}
                       disabled={pending}
-                      onPress={() => setMinutes(value)}
-                      style={[styles.button, minutes === value && styles.selected]}
+                      onChange={(nextStart, nextEnd) => {
+                        setStart(nextStart);
+                        setEnd(nextEnd);
+                        setTimeError('');
+                      }}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={pending}
+                      onPress={() => {
+                        setTimed(false);
+                        setTimeError('');
+                      }}
+                      style={[styles.button, { alignSelf: 'flex-start' }]}
                     >
-                      <Text style={styles.buttonText}>{value} min</Text>
+                      <Text style={styles.buttonText}>Remove time</Text>
                     </Pressable>
-                  ))}
-                </View>
+                  </>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={pending}
+                    onPress={() => setTimed(true)}
+                    style={[styles.button, { alignSelf: 'flex-start' }]}
+                  >
+                    <Text style={styles.buttonText}>Add a time</Text>
+                  </Pressable>
+                )}
+                {timeError !== '' && (
+                  <Text accessibilityRole="alert" style={styles.error}>
+                    {timeError}
+                  </Text>
+                )}
                 {duplicate ? (
                   <Text style={styles.muted}>Already on this day.</Text>
                 ) : full ? (

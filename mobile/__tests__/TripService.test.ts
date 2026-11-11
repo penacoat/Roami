@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { TripView } from '@roami/shared';
 
 import { ApiError } from '../src/api';
-import { addStop, moveStop, removeStop } from '../src/services/RevisionService';
+import { addStop, moveStop, removeStop, updateStopTime } from '../src/services/RevisionService';
 import {
   addCandidate,
   createTrip,
@@ -323,5 +323,66 @@ describe('stops (revision service)', () => {
     }
     expect(current.stops).toHaveLength(15);
     expect(current.trip.revision).toBe(16);
+  });
+  it('adds a stop with a start time, and refuses one that runs past midnight', async () => {
+    const view = await aliceTrip();
+    const base = { tripId: view.trip.id, expectedRevision: 1, placeId: 'p1', day: 1 };
+    await rejectsWith(
+      addStop({ ...base, startTime: '23:30', visitMinutes: 60 }),
+      'invalid-argument',
+    );
+    const { trip } = await addStop({ ...base, startTime: '13:00', visitMinutes: 90 });
+    expect(trip.stops[0]).toMatchObject({ startTime: '13:00', visitMinutes: 90 });
+  });
+  it('sets, changes, and clears a stop time', async () => {
+    const trip = await tripWithStops(['p1']);
+    const stopId = trip.stops[0].id;
+    const { trip: timed } = await updateStopTime({
+      tripId: trip.trip.id,
+      expectedRevision: trip.trip.revision,
+      stopId,
+      startTime: '13:00',
+      visitMinutes: 90,
+    });
+    expect(timed.trip.revision).toBe(trip.trip.revision + 1);
+    expect(timed.stops[0]).toMatchObject({ startTime: '13:00', visitMinutes: 90 });
+
+    const { trip: cleared } = await updateStopTime({
+      tripId: trip.trip.id,
+      expectedRevision: timed.trip.revision,
+      stopId,
+      startTime: null,
+      visitMinutes: 90,
+    });
+    expect(cleared.stops[0]).toMatchObject({ startTime: null, visitMinutes: 90 });
+  });
+  it('keeps the revision when the time is unchanged', async () => {
+    const trip = await tripWithStops(['p1']);
+    const { trip: after } = await updateStopTime({
+      tripId: trip.trip.id,
+      expectedRevision: trip.trip.revision,
+      stopId: trip.stops[0].id,
+      startTime: null,
+      visitMinutes: 60,
+    });
+    expect(after.trip.revision).toBe(trip.trip.revision);
+  });
+  it('refuses a bad time, a visit past midnight, and a stale revision', async () => {
+    const trip = await tripWithStops(['p1']);
+    const base = { tripId: trip.trip.id, stopId: trip.stops[0].id };
+    const rev = trip.trip.revision;
+    await rejectsWith(
+      updateStopTime({ ...base, expectedRevision: rev, startTime: '1pm', visitMinutes: 60 }),
+      'invalid-argument',
+    );
+    await rejectsWith(
+      updateStopTime({ ...base, expectedRevision: rev, startTime: '23:30', visitMinutes: 60 }),
+      'invalid-argument',
+    );
+    await rejectsWith(
+      updateStopTime({ ...base, expectedRevision: rev - 1, startTime: '13:00', visitMinutes: 60 }),
+      'aborted',
+    );
+    expect(fake.all('tripStops')[0]).toMatchObject({ startTime: null, visitMinutes: 60 });
   });
 });

@@ -27,4 +27,22 @@ export const itineraryStyles = StyleSheet.create({
   card: { ...buttonOutline, padding: 16, gap: 6, backgroundColor: theme.card },
   selected: { backgroundColor: theme.butter, borderColor: theme.ink },
   disabled: { opacity: 0.5 },
+  timeChip: { alignSelf: 'flex-start', paddingVertical: 4 },
+  timeText: {
+    color: theme.ink,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  field: { flexGrow: 1, flexBasis: 120, gap: 4 },
+  pickerField: { justifyContent: 'center', paddingVertical: 8, gap: 2 },
+  pickerValue: { color: theme.ink, fontSize: 17, fontWeight: '600' },
+  input: {
+    ...buttonOutline,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    backgroundColor: theme.card,
+    color: theme.ink,
+    fontSize: 16,
+  },
 });

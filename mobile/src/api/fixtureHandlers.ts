@@ -17,6 +17,7 @@ import type {
 
 import { ME, OTHER_USERS, PLACES, RECOMMENDATIONS } from './fixtureData';
 import { ApiError, type ApiHandlers } from './types';
+import { validateStopTime } from '../logic/trips';
 
 const MAX_STOPS_PER_DAY = 5;
 const MAX_TRIP_DAYS = 7;
@@ -328,6 +329,7 @@ const tripHandlers: Pick<
   | 'addStop'
   | 'moveStop'
   | 'removeStop'
+  | 'updateStopTime'
 > = {
   async createTrip(request) {
     await delay();
@@ -402,6 +404,9 @@ const tripHandlers: Pick<
     checkRevision(record, request.expectedRevision);
     getPlace(request.placeId);
     checkDay(request.day);
+    const startTime = request.startTime ?? null;
+    const timeCheck = validateStopTime({ startTime, visitMinutes: request.visitMinutes });
+    if (!timeCheck.ok) throw new ApiError('invalid-argument', timeCheck.error);
     const count = dayCount(record, request.day);
     if (count >= MAX_STOPS_PER_DAY) {
       throw new ApiError('invalid-argument', `At most ${MAX_STOPS_PER_DAY} stops per day.`);
@@ -416,7 +421,7 @@ const tripHandlers: Pick<
       recommendationIds: request.recommendationIds ?? [],
       day: request.day,
       order,
-      startTime: null,
+      startTime,
       visitMinutes: request.visitMinutes,
       walkingMinutesFromPrevious: null, // unknown, never zero
       isFixed: false,
@@ -457,6 +462,24 @@ const tripHandlers: Pick<
     if (!stop) throw new ApiError('not-found', 'No such stop.');
     record.stops = record.stops.filter((s) => s.id !== stop.id);
     renumber(record, stop.day);
+    commit(record);
+    return clone({ trip: tripView(record) });
+  },
+
+  async updateStopTime(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    checkRevision(record, request.expectedRevision);
+    const startTime = request.startTime ?? null;
+    const check = validateStopTime({ startTime, visitMinutes: request.visitMinutes });
+    if (!check.ok) throw new ApiError('invalid-argument', check.error);
+    const stop = record.stops.find((s) => s.id === request.stopId);
+    if (!stop) throw new ApiError('not-found', 'No such stop.');
+    if (stop.startTime === startTime && stop.visitMinutes === request.visitMinutes) {
+      return clone({ trip: tripView(record) });
+    }
+    stop.startTime = startTime;
+    stop.visitMinutes = request.visitMinutes;
     commit(record);
     return clone({ trip: tripView(record) });
   },

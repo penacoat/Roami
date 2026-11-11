@@ -192,6 +192,7 @@ export interface AddStopRequest {
   day: number; // 1-based
   order?: number; // 1 is first in the day; omit to append
   visitMinutes: number;
+  startTime?: string | null; // "HH:mm" (24-hour); omit or null for an untimed stop
 }
 export interface AddStopResponse {
   trip: TripView;
@@ -214,6 +215,19 @@ export interface RemoveStopRequest {
   stopId: TripStopId;
 }
 export interface RemoveStopResponse {
+  trip: TripView;
+}
+
+// Sets when a stop starts and how long it lasts. startTime is "HH:mm" (24-hour),
+// or null to leave the stop untimed. The stop must end by midnight.
+export interface UpdateStopTimeRequest {
+  tripId: TripId;
+  expectedRevision: number;
+  stopId: TripStopId;
+  startTime: string | null;
+  visitMinutes: number;
+}
+export interface UpdateStopTimeResponse {
   trip: TripView;
 }
 
@@ -250,6 +264,7 @@ export interface ApiContract {
   addStop: { request: AddStopRequest; response: AddStopResponse };
   moveStop: { request: MoveStopRequest; response: MoveStopResponse };
   removeStop: { request: RemoveStopRequest; response: RemoveStopResponse };
+  updateStopTime: { request: UpdateStopTimeRequest; response: UpdateStopTimeResponse };
 }
 
 export type ApiFunctionName = keyof ApiContract;
