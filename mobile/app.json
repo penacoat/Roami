@@ -22,7 +22,13 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-status-bar", "expo-router", "expo-font", "expo-asset"],
+    "plugins": [
+      "expo-status-bar",
+      "expo-router",
+      "expo-font",
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ],
     "scheme": "roami"
   }
 }

@@ -4,8 +4,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { callApi, resetFixtures } from '../src/api';
 import * as api from '../src/api/ApiClient';
 import { AddToItinerary } from '../src/components/AddToItinerary';
+import { pickTime } from '../test-utils/timePicker';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@react-native-community/datetimepicker', () =>
+  require('../test-utils/timePicker').timePickerModule(),
+);
 jest.mock(
   'react-native-safe-area-context',
   () => require('react-native-safe-area-context/jest/mock').default,
@@ -35,18 +39,50 @@ async function choose(city: string) {
   await screen.findByText('Choose a day');
 }
 
-it('adds only to the selected itinerary and day, with the chosen visit length', async () => {
+it('adds only to the selected itinerary and day, at the chosen times', async () => {
   const first = await create();
   const second = await create('Portland');
   await choose('Portland');
   await fireEvent.press(screen.getByRole('button', { name: /Day 2/ }));
-  await fireEvent.press(screen.getByRole('button', { name: '90 min' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add a time' }));
+  await pickTime('Start time', 13);
+  await pickTime('End time', 14, 30);
   await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
-  await screen.findByText('Added to Portland · Day 2');
+  await screen.findByText('Added to Portland · Day 2 · 1:00pm – 2:30pm');
   expect((await callApi('getTrip', { tripId: first.trip.id })).trip.stops).toHaveLength(0);
   const { trip } = await callApi('getTrip', { tripId: second.trip.id });
   expect(trip.stops).toHaveLength(1);
-  expect(trip.stops[0]).toMatchObject({ placeId: 'p-jazz', day: 2, visitMinutes: 90 });
+  expect(trip.stops[0]).toMatchObject({
+    placeId: 'p-jazz',
+    day: 2,
+    startTime: '13:00',
+    visitMinutes: 90,
+  });
+});
+
+it('adds without a time unless one is chosen', async () => {
+  const trip = await create();
+  await choose('Seattle');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle · Day 1');
+  const saved = (await callApi('getTrip', { tripId: trip.trip.id })).trip;
+  expect(saved.stops[0]).toMatchObject({ startTime: null, visitMinutes: 60 });
+});
+
+it('explains an impossible time without adding, and can drop the time', async () => {
+  const trip = await create();
+  await choose('Seattle');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add a time' }));
+  await pickTime('End time', 11);
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  expect(screen.getByText('The end time must be after the start time.')).toBeTruthy();
+  expect((await callApi('getTrip', { tripId: trip.trip.id })).trip.stops).toHaveLength(0);
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Remove time' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle · Day 1');
+  const saved = (await callApi('getTrip', { tripId: trip.trip.id })).trip;
+  expect(saved.stops[0]).toMatchObject({ startTime: null, visitMinutes: 60 });
 });
 
 it('blocks duplicate places on the same day but permits a different day', async () => {

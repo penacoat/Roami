@@ -8,6 +8,8 @@ import type {
   MoveStopResponse,
   RemoveStopRequest,
   RemoveStopResponse,
+  UpdateStopTimeRequest,
+  UpdateStopTimeResponse,
   Trip,
   TripStop,
 } from '@roami/shared';
@@ -19,6 +21,7 @@ import {
   planRemoveStop,
   tripDayCount,
   validateStopDetails,
+  validateStopTime,
   type Result,
   type StopPosition,
 } from '../logic/trips';
@@ -98,6 +101,8 @@ export async function addStop(request: AddStopRequest): Promise<AddStopResponse>
   const placeId = requirePlaceId(request.placeId);
   const recommendationIds = request.recommendationIds ?? [];
   unwrap(validateStopDetails({ visitMinutes: request.visitMinutes, recommendationIds }));
+  const startTime = request.startTime ?? null;
+  unwrap(validateStopTime({ startTime, visitMinutes: request.visitMinutes }));
 
   const trip = await reviseStops(
     request.tripId,
@@ -124,7 +129,7 @@ export async function addStop(request: AddStopRequest): Promise<AddStopResponse>
         recommendationIds: [...new Set(recommendationIds)],
         day: plan.position.day,
         order: plan.position.order,
-        startTime: null,
+        startTime,
         visitMinutes: request.visitMinutes,
         walkingMinutesFromPrevious: null, // unknown until routing exists, never zero
         isFixed: false,
@@ -169,6 +174,24 @@ export async function removeStop(request: RemoveStopRequest): Promise<RemoveStop
         stopIdsToDelete: [request.stopId],
         stopsToSave: applyPositions(stops, positions),
       };
+    },
+  );
+  return { trip };
+}
+
+export async function updateStopTime(
+  request: UpdateStopTimeRequest,
+): Promise<UpdateStopTimeResponse> {
+  const startTime = request.startTime ?? null;
+  unwrap(validateStopTime({ startTime, visitMinutes: request.visitMinutes }));
+  const trip = await reviseStops(
+    request.tripId,
+    request.expectedRevision,
+    async (_current, stops) => {
+      const stop = requireStop(stops, request.stopId);
+      // Same time and length: save nothing and keep the revision.
+      if (stop.startTime === startTime && stop.visitMinutes === request.visitMinutes) return null;
+      return { stopsToSave: [{ ...stop, startTime, visitMinutes: request.visitMinutes }] };
     },
   );
   return { trip };

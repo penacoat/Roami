@@ -118,6 +118,29 @@ export function validateStopDetails(details: {
   return ok(null);
 }
 
+/** Minutes after midnight for an "HH:mm" time. */
+export function minutesOfDay(time: string): number {
+  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+}
+
+/** Checks a stop's start time and length. A timed stop must end by midnight. */
+export function validateStopTime(details: {
+  startTime: string | null;
+  visitMinutes: number;
+}): Result<null> {
+  const { startTime, visitMinutes } = details;
+  const length = validateStopDetails({ visitMinutes });
+  if (!length.ok) return length;
+  if (startTime === null) return ok(null);
+  if (typeof startTime !== 'string' || !isValidTime(startTime)) {
+    return fail('Enter the start time as HH:mm.');
+  }
+  if (minutesOfDay(startTime) + visitMinutes > 24 * 60) {
+    return fail('The visit must end by midnight.');
+  }
+  return ok(null);
+}
+
 function checkDay(day: number, dayCount: number): string | null {
   if (!Number.isInteger(day) || day < 1 || day > dayCount) {
     return dayCount === 1 ? 'This trip has only day 1.' : `Choose a day from 1 to ${dayCount}.`;
