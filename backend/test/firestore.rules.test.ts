@@ -48,8 +48,16 @@ describe("saved places are private", () => {
   it("blocks other users", async () => {
     await assertFails(getDoc(doc(as("bob"), "savedPlaces/alice_p1")));
   });
+  it("does not confuse owners whose IDs contain underscores", async () => {
+    await seed("savedPlaces/alice_bob_p1", save("alice_bob", "p1"));
+    await assertSucceeds(getDoc(doc(as("alice_bob"), "savedPlaces/alice_bob_p1")));
+    await assertFails(getDoc(doc(as("alice"), "savedPlaces/alice_bob_p1")));
+  });
   it("blocks signed-out users", async () => {
-    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "savedPlaces/alice_p1")));
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, "savedPlaces/alice_p1")));
+    await assertFails(updateDoc(doc(db, "savedPlaces/alice_p1"), {personalNote: "private"}));
+    await assertFails(deleteDoc(doc(db, "savedPlaces/alice_p1")));
   });
 });
 
@@ -61,12 +69,21 @@ describe("trips are private unless shared, and shared means view-only", () => {
     await assertSucceeds(getDoc(doc(as("bob"), "trips/trip1")));
     await assertSucceeds(getDoc(doc(as("bob"), "tripStops/stop1")));
   });
+  it("blocks signed-out users from reading or changing a trip", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, "trips/trip1")));
+    await assertFails(getDoc(doc(db, "tripStops/stop1")));
+    await assertFails(updateDoc(doc(db, "trips/trip1"), {revision: 2}));
+    await assertFails(deleteDoc(doc(db, "trips/trip1")));
+  });
   it("blocks someone the trip was not shared with", async () => {
     await assertFails(getDoc(doc(as("carol"), "trips/trip1")));
     await assertFails(getDoc(doc(as("carol"), "tripStops/stop1")));
   });
   it("blocks viewers from editing the trip", async () => {
-    await assertFails(setDoc(doc(as("bob"), "trips/trip1"), {ownerId: "alice", revision: 2}));
+    const db = as("bob");
+    await assertFails(setDoc(doc(db, "trips/trip1"), {ownerId: "alice", revision: 2}));
+    await assertFails(deleteDoc(doc(db, "trips/trip1")));
   });
 });
 
@@ -382,6 +399,19 @@ describe("trip stops: tied to the trip revision", () => {
   it("blocks a viewer from adding a stop", async () => {
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
     await assertFails(writeStopWithRevision("bob", stop("s1", "t1", "p5"), 2));
+  });
+  it("blocks a shared viewer from editing or deleting a stop", async () => {
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    const db = as("bob");
+    await assertFails(updateDoc(doc(db, "tripStops/s1"), {day: 2}));
+    await assertFails(deleteDoc(doc(db, "tripStops/s1")));
+  });
+  it("blocks an unshared user from editing or deleting a stop", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    const db = as("carol");
+    await assertFails(updateDoc(doc(db, "tripStops/s1"), {day: 2}));
+    await assertFails(deleteDoc(doc(db, "tripStops/s1")));
   });
   it("blocks a stop on day 9", async () => {
     await assertFails(writeStopWithRevision("alice", {...stop("s1", "t1", "p5"), day: 9}, 2));

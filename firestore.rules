@@ -315,7 +315,11 @@ service cloud.firestore {
     // Saved places: private. The document ID must be userId_placeId, which gives
     // one entry per user and place. The place must exist in the catalog.
     match /savedPlaces/{saveId} {
-      allow get: if signedIn() && saveId.split('_')[0] == request.auth.uid;
+      allow get: if signedIn() && (
+        resource == null
+          ? saveId.split('_')[0] == request.auth.uid
+          : resource.data.userId == request.auth.uid
+      );
       allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if isUser(request.resource.data.userId)
         && validSave(saveId, request.resource.data)
