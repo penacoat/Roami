@@ -185,6 +185,48 @@ it('finds a place through recommendation text even when its name and category do
   await waitFor(() => expect(screen.getByLabelText('Open Kerry Park')).toBeTruthy());
 });
 
+it('shows exact place-name matches before recommendation matches in ranked order', async () => {
+  await api.callApi('createRecommendation', {
+    placeId: 'p-kerry',
+    description: 'A Seattle venue featuring Jazz Alley performances.',
+    tags: [],
+  });
+  await api.callApi('createRecommendation', {
+    placeId: 'p-pike',
+    description: 'A Seattle market featuring Jazz Alley performances.',
+    tags: [],
+  });
+  await api.callApi('savePlace', { placeId: 'p-kerry' });
+  await api.callApi('savePlace', { placeId: 'p-pike' });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByLabelText('Open Pike Place Market');
+  await fireEvent.changeText(screen.getByLabelText('Search places'), 'Jazz Alley');
+
+  await waitFor(() => {
+    expect(screen.getAllByLabelText(/Open (Jazz Alley|Kerry Park|Pike Place Market)/)).toHaveLength(
+      3,
+    );
+  });
+  expect(
+    screen
+      .getAllByLabelText(/Open (Jazz Alley|Kerry Park|Pike Place Market)/)
+      .map((item) => item.props.accessibilityLabel),
+  ).toEqual(['Open Jazz Alley', 'Open Kerry Park', 'Open Pike Place Market']);
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Saved · 2' }));
+  await screen.findByLabelText('Open Kerry Park');
+  expect(
+    screen
+      .getAllByLabelText(/Open (Kerry Park|Pike Place Market)/)
+      .map((item) => item.props.accessibilityLabel),
+  ).toEqual(['Open Kerry Park', 'Open Pike Place Market']);
+  await fireEvent.press(screen.getByLabelText('Filter category: Market'));
+  expect(screen.getByLabelText('Open Pike Place Market')).toBeTruthy();
+  expect(screen.queryByLabelText('Open Kerry Park')).toBeNull();
+});
+
 it('labels failed recommendation search honestly and recovers through retry', async () => {
   const original = api.callApi;
   let fail = true;
