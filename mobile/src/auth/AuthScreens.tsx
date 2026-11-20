@@ -10,18 +10,40 @@ import {
 } from 'react-native';
 
 import { callApi } from '../api';
-import { signIn, signUp } from './AuthService';
+import { sendPasswordReset, signIn, signUp } from './AuthService';
 import { buttonOutline } from '../components/buttonStyles';
 
 export function AuthScreen() {
-  const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [mode, setMode] = useState<'signIn' | 'signUp' | 'reset'>('signIn');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const isSignUp = mode === 'signUp';
+  const isReset = mode === 'reset';
+
+  async function handleReset() {
+    if (!email.trim()) {
+      setError('Enter the email for your account.');
+      return;
+    }
+    setError('');
+    setNotice('');
+    setSubmitting(true);
+    try {
+      await sendPasswordReset(email);
+      setNotice(
+        'If an account exists for that email, we sent a link to reset your password. Check your inbox and spam folder.',
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSubmit() {
     if (!email.trim() || !password || (isSignUp && !name.trim())) {
@@ -57,7 +79,9 @@ export function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.title}>Roami</Text>
-      <Text style={styles.subtitle}>{isSignUp ? 'Create your account' : 'Welcome back'}</Text>
+      <Text style={styles.subtitle}>
+        {isReset ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
+      </Text>
 
       {isSignUp && (
         <TextInput
@@ -77,27 +101,54 @@ export function AuthScreen() {
         autoCorrect={false}
         keyboardType="email-address"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-      />
+      {!isReset && (
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+      )}
 
-      {error !== '' && <Text style={styles.error}>{error}</Text>}
+      {mode === 'signIn' && (
+        <Pressable
+          accessibilityRole="button"
+          style={styles.forgot}
+          onPress={() => {
+            setMode('reset');
+            setError('');
+            setNotice('');
+          }}
+        >
+          <Text style={styles.link}>Forgot password?</Text>
+        </Pressable>
+      )}
+
+      {error !== '' && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      )}
+      {notice !== '' && (
+        <Text accessibilityLiveRegion="polite" style={styles.notice}>
+          {notice}
+        </Text>
+      )}
 
       <Pressable
         accessibilityRole="button"
         style={styles.button}
-        onPress={handleSubmit}
+        onPress={isReset ? handleReset : handleSubmit}
         disabled={submitting}
       >
         {submitting ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>{isSignUp ? 'Sign up' : 'Sign in'}</Text>
+          <Text style={styles.buttonText}>
+            {isReset ? 'Send reset link' : isSignUp ? 'Sign up' : 'Sign in'}
+          </Text>
         )}
       </Pressable>
 
@@ -105,11 +156,14 @@ export function AuthScreen() {
         accessibilityRole="button"
         style={styles.secondary}
         onPress={() => {
-          setMode(isSignUp ? 'signIn' : 'signUp');
+          setMode(isSignUp || isReset ? 'signIn' : 'signUp');
           setError('');
+          setNotice('');
         }}
       >
-        <Text style={styles.link}>{isSignUp ? 'Back to sign in' : 'Create an account'}</Text>
+        <Text style={styles.link}>
+          {isSignUp || isReset ? 'Back to sign in' : 'Create an account'}
+        </Text>
       </Pressable>
     </KeyboardAvoidingView>
   );
@@ -128,6 +182,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   error: { color: '#c0392b', marginBottom: 12 },
+  notice: { color: '#1e6b3a', marginBottom: 12, lineHeight: 20 },
+  forgot: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-end', marginBottom: 4 },
   button: {
     ...buttonOutline,
     borderColor: '#175DB8',
