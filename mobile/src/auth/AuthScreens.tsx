@@ -16,6 +16,7 @@ import { useAuth } from './AuthProvider';
 import {
   AuthError,
   CHECK_FAILED_MESSAGE,
+  MAX_NAME_LENGTH,
   SESSION_EXPIRED_MESSAGE,
   validateAuthForm,
   type AuthField,
@@ -198,6 +199,7 @@ export function AuthScreen() {
               accessibilityLabel="Name"
               style={[styles.input, fieldErrors.name ? styles.inputError : null]}
               placeholder="Name"
+              maxLength={MAX_NAME_LENGTH}
               value={name}
               onChangeText={(value) => {
                 setName(value);

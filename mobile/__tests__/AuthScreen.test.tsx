@@ -190,3 +190,8 @@ it('reports a failed profile save after sign-up to the app-level banner', async 
   await fireEvent.press(screen.getByRole('button', { name: 'Sign up' }));
   await waitFor(() => expect(reportProfileSetupFailed).toHaveBeenCalledTimes(1));
 });
+
+it('stops the name field at 60 characters so the limit can never be hit', async () => {
+  await openSignUp();
+  expect(screen.getByPlaceholderText('Name').props.maxLength).toBe(60);
+});
