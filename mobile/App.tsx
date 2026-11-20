@@ -4,6 +4,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
+import { ProfileSetupBanner } from './src/auth/ProfileSetupBanner';
+import { clearProfileSetupFailed, reportProfileSetupFailed } from './src/auth/profileSetup';
 import { callApi, getApiMode } from './src/api';
 
 function Root() {
@@ -38,8 +40,14 @@ function Root() {
     callApi('ensureProfile', {}).catch((error) => {
       // eslint-disable-next-line no-console
       console.warn('[profile] Could not make sure the profile exists.', error);
+      reportProfileSetupFailed();
     });
   }, [uid, hasName, servicesReady]);
+
+  // A new session starts clean: forget a profile problem from the previous account.
+  useEffect(() => {
+    if (!uid) clearProfileSetupFailed();
+  }, [uid]);
 
   if (servicesError) {
     return (
@@ -58,16 +66,19 @@ function Root() {
   }
 
   return (
-    <Stack key={user?.uid ?? 'signed-out'} screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={Boolean(user)}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="new-trip" />
-        <Stack.Screen name="itinerary/[tripId]" />
-      </Stack.Protected>
-      <Stack.Protected guard={!user}>
-        <Stack.Screen name="sign-in" />
-      </Stack.Protected>
-    </Stack>
+    <View style={styles.flex}>
+      <ProfileSetupBanner />
+      <Stack key={user?.uid ?? 'signed-out'} screenOptions={{ headerShown: false }}>
+        <Stack.Protected guard={Boolean(user)}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="new-trip" />
+          <Stack.Screen name="itinerary/[tripId]" />
+        </Stack.Protected>
+        <Stack.Protected guard={!user}>
+          <Stack.Screen name="sign-in" />
+        </Stack.Protected>
+      </Stack>
+    </View>
   );
 }
 
@@ -82,5 +93,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
 });
