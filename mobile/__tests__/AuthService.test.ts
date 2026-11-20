@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 
-import { signIn } from '../src/auth/AuthService';
+import { sendPasswordReset, signIn } from '../src/auth/AuthService';
 import { getFirebaseAuth } from '../src/auth/firebase';
 
 jest.mock('../src/auth/firebase', () => {
@@ -10,7 +10,9 @@ jest.mock('../src/auth/firebase', () => {
 });
 jest.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: jest.fn(),
+  sendPasswordResetEmail: jest.fn(),
 }));
+const mockReset = jest.mocked(sendPasswordResetEmail);
 
 const mockSignIn = jest.mocked(signInWithEmailAndPassword);
 
@@ -40,4 +42,24 @@ it('uses a fallback message for unexpected errors', async () => {
   await expect(signIn('roamer@example.com', 'password')).rejects.toThrow(
     'Something went wrong. Please try again.',
   );
+});
+
+it('sends a password reset to the trimmed email', async () => {
+  mockReset.mockResolvedValue();
+  await sendPasswordReset('  roamer@example.com ');
+  expect(mockReset).toHaveBeenCalledWith(getFirebaseAuth(), 'roamer@example.com');
+});
+
+it('does not reveal whether an email has an account', async () => {
+  mockReset.mockRejectedValue({ code: 'auth/user-not-found' });
+  await expect(sendPasswordReset('nobody@example.com')).resolves.toBeUndefined();
+});
+
+it('reports a bad email or a network failure when resetting', async () => {
+  mockReset.mockRejectedValue({ code: 'auth/invalid-email' });
+  await expect(sendPasswordReset('nope')).rejects.toThrow(
+    'That email address does not look right.',
+  );
+  mockReset.mockRejectedValue({ code: 'auth/network-request-failed' });
+  await expect(sendPasswordReset('a@b.co')).rejects.toThrow('Network error');
 });

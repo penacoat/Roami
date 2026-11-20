@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
@@ -73,6 +74,20 @@ export async function signIn(email: string, password: string): Promise<AuthUser>
     const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
     return toAuthUser(credential.user);
   } catch (error) {
+    throw new Error(friendlyMessage(error));
+  }
+}
+
+/**
+ * Emails a password reset link. An unknown address is treated as success so the
+ * screen never reveals which emails have accounts.
+ */
+export async function sendPasswordReset(email: string): Promise<void> {
+  if (isFrontendPreview) return;
+  try {
+    await sendPasswordResetEmail(getFirebaseAuth(), email.trim());
+  } catch (error) {
+    if ((error as { code?: string }).code === 'auth/user-not-found') return;
     throw new Error(friendlyMessage(error));
   }
 }
