@@ -60,9 +60,10 @@ Scan the QR code with your iPhone **Camera** app and tap the banner. The app ope
 
 ## Running the backend locally (Firebase emulators)
 
-The backend lives in `backend/` (Cloud Functions in TypeScript). We develop against the
-**Firebase emulators**, which run Authentication, Firestore, and Functions on your own
-computer. They never touch the real Firebase project's data, and they need no paid plan.
+The app talks to Firebase Authentication and Firestore directly; we do not use Cloud
+Functions. `backend/` holds the seed script and the Firestore rules tests. We develop against
+the **Firebase emulators**, which run Authentication and Firestore on your own computer.
+They never touch the real Firebase project's data, and they need no paid plan.
 
 ### One-time setup
 
@@ -80,7 +81,7 @@ computer. They never touch the real Firebase project's data, and they need no pa
    Firebase console → Project settings → Users and permissions. Then run `firebase login`
    and sign in with that account. Check with `firebase projects:list`; you should see
    `roami-7c0bd`.
-5. **Install the backend's libraries:**
+5. **Install the backend's libraries** (used by the seed script and the rules tests):
 
    ```bash
    npm --prefix backend install
@@ -89,42 +90,31 @@ computer. They never touch the real Firebase project's data, and they need no pa
 **Do not run `firebase init` again.** It's already done, and rerunning it can overwrite
 `firebase.json` and the rules file.
 
-### Every time you work on the backend
+### Every time you work with the emulators
 
 Run these from the repo root.
 
-1. Build the TypeScript into JavaScript (the emulator runs the compiled files in
-   `backend/lib/`):
+1. Start only the emulators the app uses:
 
    ```bash
-   npm --prefix backend run build
+   firebase emulators:start --only auth,firestore
    ```
 
-2. Start the emulators:
+2. Load the demo data (after every emulator restart):
 
    ```bash
-   firebase emulators:start
+   npm --prefix backend run seed
    ```
 
 3. Check that it works. The terminal prints a table, and the **Emulator UI** is at
-   http://127.0.0.1:4000. The placeholder function should respond at:
-
-   ```
-   http://127.0.0.1:5001/roami-7c0bd/us-central1/healthCheck
-   ```
-
-   You should see `{"status":"ok"}`.
+   http://127.0.0.1:4000.
 
 4. Stop the emulators with `Ctrl+C`.
 
-### After you change backend code
-
-The emulator runs the **compiled** code, so changes aren't picked up until you rebuild.
-Either rerun `npm --prefix backend run build`, or keep this running in a second terminal
-tab while you work (check `backend/package.json` under `scripts` for a `build:watch` entry):
+To run the Firestore rules tests against the emulator:
 
 ```bash
-npm --prefix backend run build:watch
+firebase emulators:exec --only firestore "npm --prefix backend run test:rules"
 ```
 
 ### Ports
@@ -132,16 +122,13 @@ npm --prefix backend run build:watch
 | Service        | Port |
 |----------------|------|
 | Authentication | 9099 |
-| Functions      | 5001 |
 | Firestore      | 8080 |
 | Emulator UI    | 4000 |
 
 ### Troubleshooting
 
-- **`backend/lib/index.js does not exist`:** you haven't built yet. Run
-  `npm --prefix backend run build`.
-- **Build errors from `tsc`:** fix them before starting the emulators. Common ones are
-  unused imports and type errors. CI runs the same build.
+- **Build errors from `tsc`** when seeding or testing: fix them first. Common ones are
+  unused imports and type errors.
 - **A Java error or "Java not found":** install Java 21 (step 1 above), then open a new
   terminal tab.
 - **"Port already in use":** another emulator is still running. Press `Ctrl+C` in its
@@ -153,12 +140,11 @@ npm --prefix backend run build:watch
   `npm audit fix --force`.
 - **Emulator data resets** every time you stop the emulators. That's expected.
 
-### Where backend code goes
+### Where code goes
 
-Follow the layering in the design: request handlers (`backend/src/handlers/`) validate
-input and check permissions, services hold each component's logic, repositories are the
-only code that reads or writes Firestore, and adapters wrap external APIs. Functions have
-to be exported from `backend/src/index.ts` to be served.
+There is no server. Services and repositories run inside the app (`mobile/src/`), and
+Firestore security rules (`firestore.rules`) enforce access on the server side. See
+`docs/where-code-goes.md`. `backend/` only holds the seed script and tests.
 
 ### Don't commit
 
@@ -168,4 +154,6 @@ files. They're already in `.gitignore`; check `git status` before every commit.
 
 
 
-## Don’t run npm run deploy (or firebase deploy) yet. It would push functions to the real Firebase project, and that needs the paid Blaze plan. Decide as a team who deploys and when.
+## Deploying
+
+We don't use Cloud Functions, so there is nothing to deploy except the Firestore rules and indexes (`firebase deploy --only firestore`). Decide as a team who deploys and when, and don't deploy rule changes that haven't passed the rules tests.

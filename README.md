@@ -133,7 +133,7 @@ The app's live flows use local Firebase Authentication and Firestore emulators. 
    npx --yes firebase-tools emulators:start --only auth,firestore
    ```
 
-   Firebase config assigns Auth port **9099** and Firestore port **8080**. The Emulator UI defaults to `http://127.0.0.1:4000`. The Functions emulator is configured in `firebase.json`, but the app flow does not need it.
+   Firebase config assigns Auth port **9099** and Firestore port **8080**. The Emulator UI defaults to `http://127.0.0.1:4000`.
 
 2. **Seed demo data.** In another repository-root terminal, run after each emulator restart:
 
@@ -209,7 +209,7 @@ The iOS Simulator uses `127.0.0.1`; a physical phone needs the Mac's reachable n
 
 ## Architecture
 
-The app uses Firebase Authentication and Cloud Firestore directly through the Firebase client SDK. There is no separate HTTP application server in the app request path. `backend/` contains the seed script, tests, and TypeScript tooling; `firebase.json` also has a Functions emulator configuration, but the app's local flows and instructions here use only Auth and Firestore.
+The app uses Firebase Authentication and Cloud Firestore directly through the Firebase client SDK. There is no separate HTTP application server in the app request path. `backend/` contains the seed script, tests, and TypeScript tooling. The project does not use Cloud Functions; the local flows and instructions here use only the Auth and Firestore emulators.
 
 The intended data path is:
 
