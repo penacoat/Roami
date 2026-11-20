@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
 
 import { callApi } from '../api';
@@ -20,6 +21,7 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState('');
 
   const isSignUp = mode === 'signUp';
@@ -102,14 +104,27 @@ export function AuthScreen() {
         keyboardType="email-address"
       />
       {!isReset && (
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-        />
+        <View style={styles.passwordRow}>
+          <TextInput
+            style={[styles.input, styles.passwordInput]}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            accessibilityState={{ checked: showPassword }}
+            hitSlop={8}
+            style={styles.eye}
+            onPress={() => setShowPassword((value) => !value)}
+          >
+            <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+          </Pressable>
+        </View>
       )}
 
       {mode === 'signIn' && (
@@ -118,6 +133,7 @@ export function AuthScreen() {
           style={styles.forgot}
           onPress={() => {
             setMode('reset');
+            setShowPassword(false);
             setError('');
             setNotice('');
           }}
@@ -157,6 +173,7 @@ export function AuthScreen() {
         style={styles.secondary}
         onPress={() => {
           setMode(isSignUp || isReset ? 'signIn' : 'signUp');
+          setShowPassword(false);
           setError('');
           setNotice('');
         }}
@@ -181,6 +198,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
   },
+  passwordRow: { justifyContent: 'center' },
+  passwordInput: { paddingRight: 64 },
+  eye: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 12,
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeText: { color: '#1a73e8', fontSize: 14, fontWeight: '600' },
   error: { color: '#c0392b', marginBottom: 12 },
   notice: { color: '#1e6b3a', marginBottom: 12, lineHeight: 20 },
   forgot: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-end', marginBottom: 4 },
