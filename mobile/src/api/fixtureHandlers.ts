@@ -4,6 +4,9 @@
 import type {
   MatchReason,
   PlaceSummary,
+  PreparationTask,
+  Ranking,
+  Visit,
   PublicUser,
   RecommendationView,
   SavedPlaceView,
@@ -17,10 +20,25 @@ import type {
 
 import { ME, OTHER_USERS, PLACES, RECOMMENDATIONS } from './fixtureData';
 import { ApiError, type ApiHandlers } from './types';
-import { validateStopTime } from '../logic/trips';
-
-const MAX_STOPS_PER_DAY = 5;
-const MAX_TRIP_DAYS = 7;
+import { journalView, validateRanking } from '../logic/journal';
+import { planPreparation, taskWithReview } from '../logic/preparation';
+import { planStopDetails } from '../logic/stopDetails';
+import { itineraryChanges, planItinerary } from '../logic/itineraryPlan';
+import {
+  applyPositions,
+  MAX_CANDIDATES,
+  isValidDate,
+  planAddStop,
+  planFixedActivity,
+  planMoveStop,
+  planRemoveStop,
+  tripDayCount,
+  validateActivityOverlap,
+  validateNewTrip,
+  validateStopDetails,
+  validateStopTime,
+  type Result,
+} from '../logic/trips';
 
 interface SavedRecord {
   placeId: string;
@@ -40,6 +58,9 @@ let saved = new Map<string, SavedRecord>();
 let trips = new Map<string, TripRecord>();
 let userRecs: RecommendationView[] = [];
 let counter = 1;
+let tasks = new Map<string, PreparationTask>();
+let visits = new Map<string, Visit>();
+let rankings = new Map<string, Ranking>();
 
 /** Puts the fixtures back to their starting state (used by tests). */
 export function resetFixtures(): void {
@@ -49,6 +70,9 @@ export function resetFixtures(): void {
   trips = new Map();
   userRecs = [];
   counter = 1;
+  tasks = new Map();
+  visits = new Map();
+  rankings = new Map();
 }
 resetFixtures();
 
@@ -97,7 +121,9 @@ function tripView(record: TripRecord): TripView {
     .map((s) => ({ ...s, place: s.placeId ? getPlace(s.placeId) : null }));
   return {
     trip: record.trip,
-    candidates: record.trip.candidatePlaceIds.map(getPlace),
+    candidates: record.trip.candidatePlaceIds
+      .filter((id) => !stops.some((stop) => stop.placeId === id))
+      .map(getPlace),
     stops,
   };
 }
@@ -119,31 +145,18 @@ function commit(record: TripRecord, patch: Partial<Trip> = {}): void {
   };
 }
 
-function checkDay(day: number): void {
-  if (!Number.isInteger(day) || day < 1 || day > MAX_TRIP_DAYS) {
-    throw new ApiError('invalid-argument', `Day must be between 1 and ${MAX_TRIP_DAYS}.`);
-  }
+function unwrap<T>(result: Result<T>): T {
+  if (!result.ok) throw new ApiError('invalid-argument', result.error);
+  return result.value;
 }
 
-function dayCount(record: TripRecord, day: number, exceptId?: string): number {
-  return record.stops.filter((s) => s.day === day && s.id !== exceptId).length;
-}
-
-function renumber(record: TripRecord, day: number): void {
-  record.stops
-    .filter((s) => s.day === day)
-    .sort((a, b) => a.order - b.order)
-    .forEach((s, index) => {
-      s.order = index + 1;
-    });
-}
-
-function makeRoom(record: TripRecord, day: number, order: number): void {
-  record.stops
-    .filter((s) => s.day === day && s.order >= order)
-    .forEach((s) => {
-      s.order += 1;
-    });
+function saveStops(record: TripRecord, updates: TripStop[], removedId?: string): void {
+  const updatedIds = new Set(updates.map((stop) => stop.id));
+  record.stops = [
+    ...record.stops.filter((stop) => stop.id !== removedId && !updatedIds.has(stop.id)),
+    ...updates,
+  ];
+  commit(record);
 }
 
 const RELATED: Record<string, string[]> = {
@@ -324,31 +337,29 @@ const tripHandlers: Pick<
   | 'createTrip'
   | 'listTrips'
   | 'getTrip'
+  | 'deleteTrip'
   | 'addCandidate'
   | 'removeCandidate'
   | 'addStop'
+  | 'addFixedActivity'
+  | 'applyItinerary'
   | 'moveStop'
   | 'removeStop'
   | 'updateStopTime'
+  | 'updateStopDetails'
 > = {
   async createTrip(request) {
     await delay();
-    if (request.endDate < request.startDate) {
-      throw new ApiError('invalid-argument', 'The end date is before the start date.');
-    }
-    const days = (Date.parse(request.endDate) - Date.parse(request.startDate)) / 86400000 + 1;
-    if (days > MAX_TRIP_DAYS) {
-      throw new ApiError('invalid-argument', `Trips can be at most ${MAX_TRIP_DAYS} days.`);
-    }
+    const checked = unwrap(validateNewTrip(request));
     const stamp = nowIso();
     const trip: Trip = {
       id: nextId('trip-'),
       ownerId: profile.id,
-      city: request.city,
-      startDate: request.startDate,
-      endDate: request.endDate,
-      dailyWindow: request.dailyWindow,
-      startingPoints: request.startingPoints ?? [],
+      city: checked.city,
+      startDate: checked.startDate,
+      endDate: checked.endDate,
+      dailyWindow: checked.dailyWindow,
+      startingPoints: checked.startingPoints ?? [],
       candidatePlaceIds: [],
       revision: 1,
       createdAt: stamp,
@@ -359,17 +370,26 @@ const tripHandlers: Pick<
     return clone({ trip: tripView(record) });
   },
 
-  async listTrips() {
+  async listTrips(request) {
     await delay();
     const summaries: TripSummary[] = [...trips.values()].map((r) => ({
       id: r.trip.id,
       city: r.trip.city,
       startDate: r.trip.startDate,
       endDate: r.trip.endDate,
-      candidateCount: r.trip.candidatePlaceIds.length,
+      candidateCount: r.trip.candidatePlaceIds.filter(
+        (id) => !r.stops.some((stop) => stop.placeId === id),
+      ).length,
       stopCount: r.stops.length,
+      ...(request.includeScheduledPlaces && {
+        scheduledPlaces: r.stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
+      }),
     }));
-    return clone({ trips: summaries });
+    return clone({
+      trips: summaries.sort(
+        (a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id),
+      ),
+    });
   },
 
   async getTrip(request) {
@@ -377,11 +397,24 @@ const tripHandlers: Pick<
     return clone({ trip: tripView(getTripRecord(request.tripId)) });
   },
 
+  async deleteTrip(request) {
+    await delay();
+    const record = trips.get(request.tripId);
+    if (record) {
+      checkRevision(record, request.expectedRevision);
+      trips.delete(request.tripId);
+    }
+    return { deleted: true };
+  },
+
   async addCandidate(request) {
     await delay();
     const record = getTripRecord(request.tripId);
     getPlace(request.placeId);
     if (!record.trip.candidatePlaceIds.includes(request.placeId)) {
+      if (record.trip.candidatePlaceIds.length >= MAX_CANDIDATES) {
+        throw new ApiError('invalid-argument', `A trip can have at most ${MAX_CANDIDATES} places.`);
+      }
       commit(record, { candidatePlaceIds: [...record.trip.candidatePlaceIds, request.placeId] });
     }
     return clone({ trip: tripView(record) });
@@ -403,32 +436,61 @@ const tripHandlers: Pick<
     const record = getTripRecord(request.tripId);
     checkRevision(record, request.expectedRevision);
     getPlace(request.placeId);
-    checkDay(request.day);
+    const id = nextId('stop-');
+    const { position, moved } = unwrap(
+      planAddStop(record.stops, tripDayCount(record.trip.startDate, record.trip.endDate), {
+        ...request,
+        id,
+      }),
+    );
     const startTime = request.startTime ?? null;
-    const timeCheck = validateStopTime({ startTime, visitMinutes: request.visitMinutes });
-    if (!timeCheck.ok) throw new ApiError('invalid-argument', timeCheck.error);
-    const count = dayCount(record, request.day);
-    if (count >= MAX_STOPS_PER_DAY) {
-      throw new ApiError('invalid-argument', `At most ${MAX_STOPS_PER_DAY} stops per day.`);
-    }
-    const order = Math.max(1, Math.min(request.order ?? count + 1, count + 1));
-    makeRoom(record, request.day, order);
-    record.stops.push({
-      id: nextId('stop-'),
+    unwrap(validateStopDetails(request));
+    unwrap(validateStopTime({ startTime, visitMinutes: request.visitMinutes }));
+    const stop: TripStop = {
+      ...position,
       tripId: record.trip.id,
       placeId: request.placeId,
       title: null,
-      recommendationIds: request.recommendationIds ?? [],
-      day: request.day,
-      order,
+      recommendationIds: [...new Set(request.recommendationIds ?? [])],
       startTime,
       visitMinutes: request.visitMinutes,
-      walkingMinutesFromPrevious: null, // unknown, never zero
+      walkingMinutesFromPrevious: null,
       isFixed: false,
       isRequired: false,
       warnings: [],
-    });
-    commit(record);
+    };
+    unwrap(validateActivityOverlap(record.stops, stop));
+    saveStops(record, [stop, ...applyPositions(record.stops, moved)]);
+    return clone({ trip: tripView(record) });
+  },
+
+  async addFixedActivity(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    checkRevision(record, request.expectedRevision);
+    const { stop, moved } = unwrap(
+      planFixedActivity(record.trip, record.stops, nextId('stop-'), request),
+    );
+    saveStops(record, [stop, ...applyPositions(record.stops, moved)]);
+    return clone({ trip: tripView(record) });
+  },
+
+  async applyItinerary(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    checkRevision(record, request.expectedRevision);
+    const plan = unwrap(
+      planItinerary(record.trip, record.stops, request.placeIds, request.strategy),
+    );
+    const changes = itineraryChanges(record.stops, plan);
+    for (const stop of changes) {
+      if (stop.id === null) getPlace(stop.placeId!);
+    }
+    if (changes.length)
+      saveStops(
+        record,
+        changes.map((stop) => ({ ...stop, id: stop.id ?? nextId('stop-') })),
+      );
     return clone({ trip: tripView(record) });
   },
 
@@ -436,21 +498,14 @@ const tripHandlers: Pick<
     await delay();
     const record = getTripRecord(request.tripId);
     checkRevision(record, request.expectedRevision);
-    checkDay(request.day);
     const stop = record.stops.find((s) => s.id === request.stopId);
     if (!stop) throw new ApiError('not-found', 'No such stop.');
-    const targetCount = dayCount(record, request.day, stop.id);
-    if (targetCount >= MAX_STOPS_PER_DAY) {
-      throw new ApiError('invalid-argument', `At most ${MAX_STOPS_PER_DAY} stops per day.`);
-    }
-    const order = Math.max(1, Math.min(request.order, targetCount + 1));
-    const oldDay = stop.day;
-    record.stops = record.stops.filter((s) => s.id !== stop.id);
-    renumber(record, oldDay);
-    makeRoom(record, request.day, order);
-    record.stops.push({ ...stop, day: request.day, order });
-    renumber(record, request.day);
-    commit(record);
+    const positions = unwrap(
+      planMoveStop(record.stops, tripDayCount(record.trip.startDate, record.trip.endDate), request),
+    );
+    if (stop.day !== request.day)
+      unwrap(validateActivityOverlap(record.stops, { ...stop, day: request.day }));
+    if (positions.length) saveStops(record, applyPositions(record.stops, positions));
     return clone({ trip: tripView(record) });
   },
 
@@ -458,11 +513,8 @@ const tripHandlers: Pick<
     await delay();
     const record = getTripRecord(request.tripId);
     checkRevision(record, request.expectedRevision);
-    const stop = record.stops.find((s) => s.id === request.stopId);
-    if (!stop) throw new ApiError('not-found', 'No such stop.');
-    record.stops = record.stops.filter((s) => s.id !== stop.id);
-    renumber(record, stop.day);
-    commit(record);
+    const positions = unwrap(planRemoveStop(record.stops, request.stopId));
+    saveStops(record, applyPositions(record.stops, positions), request.stopId);
     return clone({ trip: tripView(record) });
   },
 
@@ -478,11 +530,103 @@ const tripHandlers: Pick<
     if (stop.startTime === startTime && stop.visitMinutes === request.visitMinutes) {
       return clone({ trip: tripView(record) });
     }
-    stop.startTime = startTime;
-    stop.visitMinutes = request.visitMinutes;
-    commit(record);
+    const updated = { ...stop, startTime, visitMinutes: request.visitMinutes };
+    if (request.requireOpenSlot && stop.isFixed) {
+      throw new ApiError('invalid-argument', 'Fixed activities stay at their scheduled time.');
+    }
+    unwrap(validateActivityOverlap(record.stops, updated, request.requireOpenSlot));
+    saveStops(record, [updated]);
+    return clone({ trip: tripView(record) });
+  },
+
+  async updateStopDetails(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    checkRevision(record, request.expectedRevision);
+    const stop = fixtureStop(request.tripId, request.stopId);
+    saveStops(record, [unwrap(planStopDetails(stop, request))]);
     return clone({ trip: tripView(record) });
   },
 };
 
-export const fixtureHandlers: ApiHandlers = { ...discoveryHandlers, ...tripHandlers };
+function fixtureStop(tripId: string, stopId: string) {
+  const stop = getTripRecord(tripId).stops.find((item) => item.id === stopId);
+  if (!stop) throw new ApiError('not-found', 'That activity is no longer in this trip.');
+  return stop;
+}
+
+function fixtureJournal() {
+  return journalView(
+    [...visits.values()],
+    [...rankings.values()],
+    new Map(PLACES.map((place) => [place.id, place])),
+  );
+}
+
+const personalHandlers: Pick<
+  ApiHandlers,
+  | 'listPreparation'
+  | 'savePreparation'
+  | 'removePreparation'
+  | 'getPlaceJournal'
+  | 'markVisited'
+  | 'saveRanking'
+> = {
+  async listPreparation(request) {
+    await delay();
+    const stop = fixtureStop(request.tripId, request.stopId);
+    return clone({
+      tasks: [...tasks.values()]
+        .filter((task) => task.tripStopId === stop.id)
+        .map((task) => taskWithReview(task, stop)),
+    });
+  },
+  async savePreparation(request) {
+    await delay();
+    const stop = fixtureStop(request.tripId, request.stopId);
+    const current = request.taskId ? tasks.get(request.taskId) : undefined;
+    if (request.taskId && current?.tripStopId !== stop.id)
+      throw new ApiError('not-found', 'That checklist item is unavailable.');
+    const task = unwrap(planPreparation(request, stop, current?.id ?? nextId('task-'), current));
+    tasks.set(task.id, task);
+    return clone({ task: taskWithReview(task, stop) });
+  },
+  async removePreparation(request) {
+    await delay();
+    const stop = fixtureStop(request.tripId, request.stopId);
+    if (tasks.get(request.taskId)?.tripStopId !== stop.id)
+      throw new ApiError('not-found', 'That checklist item is unavailable.');
+    tasks.delete(request.taskId);
+    return { deleted: true };
+  },
+  async getPlaceJournal() {
+    await delay();
+    return clone(fixtureJournal());
+  },
+  async markVisited(request) {
+    await delay();
+    if (!isValidDate(request.visitDate))
+      throw new ApiError('invalid-argument', 'Choose a valid visit date.');
+    getPlace(request.placeId);
+    const id = `${profile.id}_${request.placeId}_${request.visitDate}`;
+    const visit = { id, userId: profile.id, ...request };
+    visits.set(id, visit);
+    return clone({ visit });
+  },
+  async saveRanking(request) {
+    await delay();
+    unwrap(validateRanking(request.category, request.placeIds, fixtureJournal()));
+    rankings.set(request.category, {
+      id: `${profile.id}_${request.category}`,
+      userId: profile.id,
+      ...request,
+    });
+    return clone(fixtureJournal());
+  },
+};
+
+export const fixtureHandlers: ApiHandlers = {
+  ...discoveryHandlers,
+  ...tripHandlers,
+  ...personalHandlers,
+};

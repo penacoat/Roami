@@ -1,3 +1,5 @@
+import { MAX_TRIP_DAYS, isValidTime, tripDayCount } from '../logic/trips';
+
 export interface TripDraft {
   city: string;
   startDate: string;
@@ -19,9 +21,7 @@ export function formatDate(value: string): string {
 }
 
 export function tripDays(start: string, end: string): number {
-  return (
-    Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1
-  );
+  return tripDayCount(start, end);
 }
 
 function validDate(value: string): boolean {
@@ -36,8 +36,10 @@ export function validateTripDraft(draft: TripDraft): string | null {
     return 'Choose your departure and return dates.';
   if (draft.endDate < draft.startDate)
     return 'Your return date must be on or after your departure.';
-  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-  if (!timePattern.test(draft.dayStart) || !timePattern.test(draft.dayEnd)) {
+  if (tripDays(draft.startDate, draft.endDate) > MAX_TRIP_DAYS) {
+    return `Trips can be at most ${MAX_TRIP_DAYS} days.`;
+  }
+  if (!isValidTime(draft.dayStart) || !isValidTime(draft.dayEnd)) {
     return 'Use 24-hour time for daily hours, for example 09:00 and 21:00.';
   }
   if (draft.dayEnd <= draft.dayStart) return 'Daily end time must be after the start time.';

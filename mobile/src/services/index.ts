@@ -1,13 +1,30 @@
 import { registerLiveHandlers } from '../api';
 
+import { getPlaceJournal, markVisited, saveRanking } from './JournalService';
+import { listPreparation, savePreparation, removePreparation } from './PreparationService';
 import { getFeed } from './DiscoveryService';
 import { getPlace, listPlaces } from './PlaceService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { createRecommendation } from './RecommendationService';
-import { addStop, moveStop, removeStop, updateStopTime } from './RevisionService';
+import {
+  addFixedActivity,
+  addStop,
+  applyItinerary,
+  moveStop,
+  removeStop,
+  updateStopTime,
+  updateStopDetails,
+} from './RevisionService';
 import { listSavedPlaces, removeSavedPlace, savePlace, updateSavedNote } from './SaveService';
 import { searchRecommendations } from './SearchService';
-import { addCandidate, createTrip, getTrip, listTrips, removeCandidate } from './TripService';
+import {
+  addCandidate,
+  createTrip,
+  deleteTrip,
+  getTrip,
+  listTrips,
+  removeCandidate,
+} from './TripService';
 
 /**
  * Called once at app startup. Each service registered here replaces its fixture
@@ -31,11 +48,21 @@ export function registerServices(): void {
     createTrip,
     listTrips,
     getTrip,
+    deleteTrip,
     addCandidate,
     removeCandidate,
     addStop,
+    addFixedActivity,
+    applyItinerary,
     moveStop,
     removeStop,
     updateStopTime,
+    updateStopDetails,
+    listPreparation,
+    savePreparation,
+    removePreparation,
+    getPlaceJournal,
+    markVisited,
+    saveRanking,
   });
 }

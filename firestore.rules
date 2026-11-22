@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function canViewTrip(tripId) {
-      return isUser(tripOwnerId(tripId)) || sharedWithMe(tripId);
+      return exists(tripPath(tripId)) && (isUser(tripOwnerId(tripId)) || sharedWithMe(tripId));
     }
 
     function taskTripId(stopId) {
@@ -60,7 +60,7 @@ service cloud.firestore {
     }
 
     function validStop(stopId, d) {
-      return d.keys().hasOnly(['id', 'tripId', 'placeId', 'title', 'recommendationIds', 'day', 'order', 'startTime', 'visitMinutes', 'walkingMinutesFromPrevious', 'isFixed', 'isRequired', 'warnings'])
+      return d.keys().hasOnly(['id', 'tripId', 'placeId', 'title', 'recommendationIds', 'day', 'order', 'startTime', 'visitMinutes', 'walkingMinutesFromPrevious', 'isFixed', 'isRequired', 'warnings', 'cost'])
         && d.keys().hasAll(['id', 'tripId', 'placeId', 'title', 'recommendationIds', 'day', 'order', 'startTime', 'visitMinutes', 'walkingMinutesFromPrevious', 'isFixed', 'isRequired', 'warnings'])
         && d.id == stopId
         && shortString(d.tripId, 200)
@@ -75,7 +75,14 @@ service cloud.firestore {
         && (d.walkingMinutesFromPrevious == null
             || (d.walkingMinutesFromPrevious is number && d.walkingMinutesFromPrevious >= 0))
         && d.isFixed is bool && d.isRequired is bool
-        && d.warnings is list && d.warnings.size() <= 20;
+        && d.warnings is list && d.warnings.size() <= 20
+        && (!('cost' in d) || d.cost == null || validKnownCost(d.cost));
+    }
+
+    function validKnownCost(cost) {
+      return cost is map && cost.keys().hasOnly(['amount', 'currency'])
+        && cost.amount is number && cost.amount >= 0 && cost.amount <= 1000000000
+        && cost.currency is string && cost.currency.matches('^[A-Z]{3}$');
     }
 
     function shortString(v, limit) {
@@ -218,7 +225,7 @@ service cloud.firestore {
     }
 
     function validPreparationTask(taskId, d) {
-      return d.keys().hasOnly(['id', 'tripStopId', 'title', 'bookingUrl', 'source', 'deadline', 'needsReview'])
+      return d.keys().hasOnly(['id', 'tripStopId', 'title', 'bookingUrl', 'source', 'deadline', 'needsReview', 'completed', 'reviewedSchedule'])
         && d.keys().hasAll(['id', 'tripStopId', 'title', 'bookingUrl', 'source', 'deadline', 'needsReview'])
         && d.id == taskId
         && shortString(d.tripStopId, 200)
@@ -227,7 +234,16 @@ service cloud.firestore {
         && (d.source == null || d.source is string)
         && (d.deadline == null || d.deadline is string)
         && d.needsReview is bool
+        && (!('completed' in d) || d.completed is bool)
+        && (!('reviewedSchedule' in d) || validReviewedSchedule(d.reviewedSchedule))
         && exists(/databases/$(database)/documents/tripStops/$(d.tripStopId));
+    }
+
+    function validReviewedSchedule(schedule) {
+      return schedule is map && schedule.keys().hasOnly(['day', 'startTime', 'visitMinutes'])
+        && schedule.day is int && schedule.day >= 1 && schedule.day <= 7
+        && (schedule.startTime == null || schedule.startTime is string)
+        && schedule.visitMinutes is int && schedule.visitMinutes > 0 && schedule.visitMinutes <= 720;
     }
 
     // Profiles: any signed-in user can read; you can create and edit only your own.
@@ -359,8 +375,7 @@ service cloud.firestore {
     }
 
     // Trips: the owner and people the trip is shared with can read (view-only).
-    // Only the owner can write, and every change must raise the revision by exactly
-    // one, so an out-of-date save is refused. Deleting a trip is not allowed yet.
+    // Only the owner can delete a trip or update its current revision.
     match /trips/{tripId} {
       allow read: if isUser(resource.data.ownerId) || sharedWithMe(tripId);
       allow create: if isUser(request.resource.data.ownerId)
@@ -371,9 +386,10 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if isUser(resource.data.ownerId);
     }
 
-    // Stops can change only in a batch that also raises the trip's revision by one.
+    // Stops change with a trip revision bump, or are removed with the trip.
     // A stop points to a catalog place, or is a fixed commitment with a title only.
     match /tripStops/{stopId} {
       allow read: if canViewTrip(resource.data.tripId);
@@ -385,12 +401,12 @@ service cloud.firestore {
         && request.resource.data.tripId == resource.data.tripId
         && revisionBumped(resource.data.tripId);
       allow delete: if isUser(tripOwnerId(resource.data.tripId))
-        && revisionBumped(resource.data.tripId);
+        && (!existsAfter(tripPath(resource.data.tripId)) || revisionBumped(resource.data.tripId));
     }
 
     // Sharing: only the trip owner can choose who can view. Viewers can see their own share.
     match /tripShares/{tripId} {
-      allow read: if signedIn()
+      allow read: if signedIn() && exists(tripPath(tripId))
         && (isUser(tripOwnerId(tripId))
             || (resource != null && request.auth.uid in resource.data.viewerIds));
       allow create, update: if isUser(tripOwnerId(tripId))

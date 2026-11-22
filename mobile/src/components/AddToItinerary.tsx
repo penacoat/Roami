@@ -12,18 +12,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
-import { callApi } from '../api';
-import { MAX_STOPS_PER_DAY } from '../logic/trips';
+import { ApiError, callApi } from '../api';
+import { DEFAULT_VISIT_MINUTES, MAX_STOPS_PER_DAY } from '../logic/trips';
 import { tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
 import { DEFAULT_END, DEFAULT_START, formatTimeRange, rangeFromMinutes } from '../trips/stopTime';
+import { HoursWarning } from '../trips/StopInsights';
 import { TimeRangePicker } from '../trips/TimeRangePicker';
 
-// Length given to a stop added without a time, until the user sets one.
-const DEFAULT_VISIT_MINUTES = 60;
-
-export function AddToItinerary({ place }: { place: PlaceSummary }) {
+export function AddToItinerary({
+  place,
+  target,
+  onChanged,
+}: {
+  place: PlaceSummary;
+  target?: { tripId: string; day: number };
+  onChanged?: (trip: TripView) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -36,7 +42,7 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const [added, setAdded] = useState(false);
+  const [added, setAdded] = useState<'stop' | 'candidate' | null>(null);
   const [retry, setRetry] = useState(0);
   const busy = useRef(false);
 
@@ -47,7 +53,7 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
       ? callApi('getTrip', { tripId: selectedId }).then(({ trip }) => {
           if (active) setSelected(trip);
         })
-      : callApi('listTrips', {}).then(({ trips: items }) => {
+      : callApi('listTrips', { includeScheduledPlaces: true }).then(({ trips: items }) => {
           if (active) setTrips(items);
         });
     load
@@ -64,11 +70,11 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
 
   const days = selected ? tripDays(selected.trip.startDate, selected.trip.endDate) : 0;
   const stops = selected?.stops.filter((stop) => stop.day === day) ?? [];
-  const duplicate = stops.some((stop) => stop.placeId === place.id);
+  const existing = selected?.stops.find((stop) => stop.placeId === place.id);
+  const duplicate = Boolean(existing);
+  const suggested = selected?.candidates.some((item) => item.id === place.id);
   const full = stops.length >= MAX_STOPS_PER_DAY;
-  const addedStop = added
-    ? selected?.stops.find((stop) => stop.placeId === place.id && stop.day === day)
-    : undefined;
+  const draftTime = timed ? rangeFromMinutes(start, end) : null;
 
   // Without a time, the place is added untimed; it can be set later on the itinerary.
   function readTimes(): { startTime: string | null; visitMinutes: number } | null {
@@ -81,25 +87,27 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
     return { startTime: range.startTime, visitMinutes: range.visitMinutes };
   }
 
-  async function add() {
-    if (!selected || busy.current || duplicate || full || day > days) return;
-    const times = readTimes();
-    if (!times) return;
+  async function add(kind: 'stop' | 'candidate') {
+    if (!selected || busy.current || duplicate || (kind === 'stop' && (full || day > days))) return;
+    const times = kind === 'stop' ? readTimes() : null;
+    if (kind === 'stop' && !times) return;
     setTimeError('');
     busy.current = true;
     setPending(true);
     setError('');
     try {
-      const result = await callApi('addStop', {
-        tripId: selected.trip.id,
-        expectedRevision: selected.trip.revision,
-        placeId: place.id,
-        day,
-        startTime: times.startTime,
-        visitMinutes: times.visitMinutes,
-      });
+      const selection = { tripId: selected.trip.id, placeId: place.id };
+      const result = times
+        ? await callApi('addStop', {
+            ...selection,
+            expectedRevision: selected.trip.revision,
+            day,
+            ...times,
+          })
+        : await callApi('addCandidate', selection);
       setSelected(result.trip);
-      setAdded(true);
+      setAdded(kind);
+      onChanged?.(result.trip);
     } catch (failure) {
       if (
         failure &&
@@ -112,7 +120,11 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
         setSelected(null);
         setRetry((value) => value + 1);
       } else {
-        setError('Could not add this place. Try again.');
+        setError(
+          failure instanceof ApiError && failure.code === 'invalid-argument'
+            ? failure.message
+            : 'Could not add this place. Try again.',
+        );
       }
     } finally {
       busy.current = false;
@@ -128,23 +140,25 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Add ${place.name} to an itinerary`}
+        accessibilityLabel={
+          target ? `Plan ${place.name} for Day ${target.day}` : `Add ${place.name} to an itinerary`
+        }
         style={styles.button}
         onPress={() => {
           setLoading(true);
           setSelected(null);
-          setSelectedId('');
-          setDay(1);
+          setSelectedId(target?.tripId ?? '');
+          setDay(target?.day ?? 1);
           setTimed(false);
           setStart(DEFAULT_START);
           setEnd(DEFAULT_END);
           setTimeError('');
-          setAdded(false);
+          setAdded(null);
           setError('');
           setOpen(true);
         }}
       >
-        <Text style={styles.buttonText}>Add to itinerary</Text>
+        <Text style={styles.buttonText}>{target ? place.name : 'Add to itinerary'}</Text>
       </Pressable>
       <Modal
         visible={open}
@@ -177,112 +191,136 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
             ) : added && selected ? (
               <>
                 <Text accessibilityLiveRegion="polite" style={styles.text}>
-                  Added to {selected.trip.city} · Day {day}
-                  {addedStop?.startTime
-                    ? ` · ${formatTimeRange(addedStop.startTime, addedStop.visitMinutes)}`
-                    : ''}
+                  {added === 'candidate'
+                    ? `Saved as a suggestion for ${selected.trip.city}.`
+                    : `Added to ${selected.trip.city} · Day ${day}${
+                        existing?.startTime
+                          ? ` · ${formatTimeRange(existing.startTime, existing.visitMinutes)}`
+                          : ''
+                      }`}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
                   style={[styles.button, styles.primary]}
                   onPress={() => {
                     close();
-                    router.push({
-                      pathname: '/itinerary/[tripId]',
-                      params: { tripId: selected.trip.id },
-                    });
+                    if (!target)
+                      router.push({
+                        pathname: '/itinerary/[tripId]',
+                        params: { tripId: selected.trip.id },
+                      });
                   }}
                 >
-                  <Text style={styles.primaryText}>View itinerary</Text>
+                  <Text style={styles.primaryText}>{target ? 'Done' : 'View itinerary'}</Text>
                 </Pressable>
               </>
             ) : selected ? (
               <>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={pending}
-                  style={styles.button}
-                  onPress={() => {
-                    setLoading(true);
-                    setSelected(null);
-                    setSelectedId('');
-                    setError('');
-                  }}
-                >
-                  <Text style={styles.buttonText}>← Change itinerary</Text>
-                </Pressable>
-                <Text style={styles.heading}>{selected.trip.city}</Text>
-                <Text style={styles.text}>Choose a day</Text>
-                <View style={styles.wrap}>
-                  {Array.from({ length: days }, (_, index) => index + 1).map((value) => (
-                    <Pressable
-                      key={value}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: day === value, disabled: pending }}
-                      disabled={pending}
-                      onPress={() => {
-                        setDay(value);
-                        setError('');
-                      }}
-                      style={[styles.button, day === value && styles.selected]}
-                    >
-                      <Text style={styles.buttonText}>
-                        {itineraryDayLabel(selected.trip.startDate, value)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={styles.text}>Time</Text>
-                <Text style={styles.muted}>Optional. You can set or change it later.</Text>
-                {timed ? (
-                  <>
-                    <TimeRangePicker
-                      start={start}
-                      end={end}
-                      disabled={pending}
-                      onChange={(nextStart, nextEnd) => {
-                        setStart(nextStart);
-                        setEnd(nextEnd);
-                        setTimeError('');
-                      }}
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={pending}
-                      onPress={() => {
-                        setTimed(false);
-                        setTimeError('');
-                      }}
-                      style={[styles.button, { alignSelf: 'flex-start' }]}
-                    >
-                      <Text style={styles.buttonText}>Remove time</Text>
-                    </Pressable>
-                  </>
-                ) : (
+                {!target && (
                   <Pressable
                     accessibilityRole="button"
                     disabled={pending}
-                    onPress={() => setTimed(true)}
-                    style={[styles.button, { alignSelf: 'flex-start' }]}
+                    style={styles.button}
+                    onPress={() => {
+                      setLoading(true);
+                      setSelected(null);
+                      setSelectedId('');
+                      setError('');
+                    }}
                   >
-                    <Text style={styles.buttonText}>Add a time</Text>
+                    <Text style={styles.buttonText}>← Change itinerary</Text>
                   </Pressable>
                 )}
-                {timeError !== '' && (
-                  <Text accessibilityRole="alert" style={styles.error}>
-                    {timeError}
-                  </Text>
+                <Text style={styles.heading}>{selected.trip.city}</Text>
+                {target ? (
+                  <Text style={styles.text}>{itineraryDayLabel(selected.trip.startDate, day)}</Text>
+                ) : (
+                  <>
+                    <Text style={styles.text}>Choose a day</Text>
+                    <View style={styles.wrap}>
+                      {Array.from({ length: days }, (_, index) => index + 1).map((value) => (
+                        <Pressable
+                          key={value}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: day === value, disabled: pending }}
+                          disabled={pending}
+                          onPress={() => {
+                            setDay(value);
+                            setError('');
+                          }}
+                          style={[styles.button, day === value && styles.selected]}
+                        >
+                          <Text style={styles.buttonText}>
+                            {itineraryDayLabel(selected.trip.startDate, value)}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
                 )}
-                {duplicate ? (
-                  <Text style={styles.muted}>Already on this day.</Text>
+                {!duplicate && !full && (
+                  <>
+                    <Text style={styles.text}>Time</Text>
+                    <Text style={styles.muted}>Optional. You can set or change it later.</Text>
+                    {timed ? (
+                      <>
+                        <TimeRangePicker
+                          start={start}
+                          end={end}
+                          disabled={pending}
+                          onChange={(nextStart, nextEnd) => {
+                            setStart(nextStart);
+                            setEnd(nextEnd);
+                            setTimeError('');
+                          }}
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={pending}
+                          onPress={() => {
+                            setTimed(false);
+                            setTimeError('');
+                          }}
+                          style={[styles.button, { alignSelf: 'flex-start' }]}
+                        >
+                          <Text style={styles.buttonText}>Remove time</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={pending}
+                        onPress={() => setTimed(true)}
+                        style={[styles.button, { alignSelf: 'flex-start' }]}
+                      >
+                        <Text style={styles.buttonText}>Add a time</Text>
+                      </Pressable>
+                    )}
+                    {draftTime?.ok && (
+                      <HoursWarning stop={draftTime} hours={selected.trip.dailyWindow} />
+                    )}
+                    {timeError !== '' && (
+                      <Text accessibilityRole="alert" style={styles.error}>
+                        {timeError}
+                      </Text>
+                    )}
+                  </>
+                )}
+                {existing ? (
+                  <Text style={styles.muted}>
+                    Already scheduled · {itineraryDayLabel(selected.trip.startDate, existing.day)}
+                  </Text>
                 ) : full ? (
-                  <Text style={styles.muted}>This day has five stops. Choose another day.</Text>
+                  <Text style={styles.muted}>
+                    This day has {MAX_STOPS_PER_DAY} stops. Choose another day or save a trip
+                    suggestion.
+                  </Text>
                 ) : null}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ disabled: pending || duplicate || full, busy: pending }}
                   disabled={pending || duplicate || full}
-                  onPress={() => void add()}
+                  onPress={() => void add('stop')}
                   style={[
                     styles.button,
                     styles.primary,
@@ -291,6 +329,19 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
                 >
                   <Text style={styles.primaryText}>{pending ? 'Adding…' : 'Add place'}</Text>
                 </Pressable>
+                {!duplicate && (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={pending || suggested}
+                    accessibilityState={{ disabled: pending || suggested }}
+                    onPress={() => void add('candidate')}
+                    style={[styles.button, (pending || suggested) && styles.disabled]}
+                  >
+                    <Text style={styles.buttonText}>
+                      {suggested ? 'Already a trip suggestion' : 'Save as a trip suggestion'}
+                    </Text>
+                  </Pressable>
+                )}
               </>
             ) : (
               <>
@@ -312,6 +363,13 @@ export function AddToItinerary({ place }: { place: PlaceSummary }) {
                     <Text style={styles.muted}>
                       {formatDate(trip.startDate)} – {formatDate(trip.endDate)}
                     </Text>
+                    {trip.scheduledPlaces
+                      ?.filter((stop) => stop.placeId === place.id)
+                      .map((stop) => (
+                        <Text key={stop.day} style={styles.muted}>
+                          Scheduled · {itineraryDayLabel(trip.startDate, stop.day)}
+                        </Text>
+                      ))}
                   </Pressable>
                 ))}
                 {trips.length === 0 && !error && (

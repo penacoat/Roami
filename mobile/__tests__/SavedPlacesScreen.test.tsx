@@ -89,3 +89,22 @@ it('distinguishes failed loading from an empty list and recovers', async () => {
   await fireEvent.press(await screen.findByRole('button', { name: 'Explore places' }));
   expect(explore).toHaveBeenCalledTimes(1);
 });
+
+it('shows the trip and day for a scheduled saved place', async () => {
+  const { trip } = await api.callApi('createTrip', {
+    city: 'Seattle',
+    startDate: '2026-11-10',
+    endDate: '2026-11-11',
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await api.callApi('addStop', {
+    tripId: trip.trip.id,
+    expectedRevision: trip.trip.revision,
+    placeId: 'p-jazz',
+    day: 2,
+    visitMinutes: 60,
+  });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await screen.findByText('Scheduled in Seattle (trip starts Nov 10, 2026) · Day 2 · Nov 11, 2026');
+});

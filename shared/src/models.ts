@@ -60,9 +60,15 @@ export interface Place {
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not "closed"
+  cost?: KnownCost;
   missingFields: string[]; // e.g. ["openingHours"]
   source: DataSource;
   updatedAt: string;
+}
+
+export interface KnownCost {
+  amount: number;
+  currency: string;
 }
 
 // 3. Social recommendations
@@ -159,6 +165,7 @@ export interface TripStop {
   isFixed: boolean; // fixed commitment, never moved by the planner
   isRequired: boolean; // required stop, always kept in the plan
   warnings: string[];
+  cost?: KnownCost | null;
 }
 
 /** Document ID is the trip ID. Viewers get read-only access. */
@@ -175,6 +182,8 @@ export interface PreparationTask {
   source: string | null;
   deadline: string | null;
   needsReview: boolean; // set when the stop changes
+  completed?: boolean;
+  reviewedSchedule?: Pick<TripStop, 'day' | 'startTime' | 'visitMinutes'>;
 }
 
 // 6. Visits and rankings

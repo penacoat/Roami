@@ -351,9 +351,12 @@ describe("trips: who can write and how", () => {
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
     await assertFails(updateDoc(doc(as("bob"), "trips/t1"), {revision: 2}));
   });
-  it("blocks deleting a trip from the app", async () => {
+  it("lets only the owner delete a trip", async () => {
     await seed("trips/t1", trip("alice", "t1", 1));
-    await assertFails(deleteDoc(doc(as("alice"), "trips/t1")));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertFails(deleteDoc(doc(as("bob"), "trips/t1")));
+    await assertSucceeds(deleteDoc(doc(as("alice"), "trips/t1")));
+    await assertFails(getDoc(doc(as("bob"), "tripShares/t1")));
   });
 });
 
@@ -406,6 +409,21 @@ describe("trip stops: tied to the trip revision", () => {
     batch.update(doc(db, "trips/t1"), {revision: 2, updatedAt: now});
     batch.delete(doc(db, "tripStops/s1"));
     await assertSucceeds(batch.commit());
+  });
+  it("lets the owner remove stops and shares in the trip deletion batch", async () => {
+    await seed("tripStops/s1", stop("s1", "t1", "p5"));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    const db = as("alice");
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "tripStops/s1"));
+    batch.delete(doc(db, "tripShares/t1"));
+    batch.delete(doc(db, "trips/t1"));
+    await assertSucceeds(batch.commit());
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      for (const path of ["tripStops/s1", "tripShares/t1", "trips/t1"]) {
+        expect((await getDoc(doc(ctx.firestore(), path))).exists()).toBe(false);
+      }
+    });
   });
   it("blocks deleting a stop without raising the revision", async () => {
     await seed("tripStops/s1", stop("s1", "t1", "p5"));

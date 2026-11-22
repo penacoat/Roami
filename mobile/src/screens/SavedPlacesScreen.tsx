@@ -4,20 +4,24 @@ import {
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { SavedPlaceView } from '@roami/shared';
+import type { SavedPlaceView, TripSummary } from '@roami/shared';
 import { callApi } from '../api';
 import { buttonOutline } from '../components/buttonStyles';
+import { PlaceJournal } from '../components/PlaceJournal';
 import { AddToItinerary } from '../components/AddToItinerary';
 import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
 } from '../hooks/useSavedPlacesChanges';
 import { colors } from './map/theme';
+import { itineraryDayLabel } from '../trips/itineraryDayLabel';
+import { formatDate } from '../trips/tripDraft';
 
 interface Props {
   refreshKey: number;
@@ -27,12 +31,16 @@ interface Props {
 
 export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props) {
   const savedChanges = useSavedPlacesChangeVersion('saved');
+  const [journalOpen, setJournalOpen] = useState(false);
   const [places, setPlaces] = useState<SavedPlaceView[]>([]);
   const [loadedKey, setLoadedKey] = useState('');
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [pending, setPending] = useState('');
   const [removedName, setRemovedName] = useState('');
+  const [trips, setTrips] = useState<TripSummary[]>([]);
+  const [scheduleError, setScheduleError] = useState(false);
+  const [scheduleRefresh, setScheduleRefresh] = useState(0);
   const busy = useRef(false);
   const revision = useRef(0);
   const loadKey = JSON.stringify([refreshKey, refresh, savedChanges]);
@@ -59,6 +67,22 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
       active = false;
     };
   }, [loadKey]);
+
+  useEffect(() => {
+    let active = true;
+    callApi('listTrips', { includeScheduledPlaces: true })
+      .then(({ trips }) => {
+        if (!active) return;
+        setTrips(trips);
+        setScheduleError(false);
+      })
+      .catch(() => {
+        if (active) setScheduleError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshKey, refresh, scheduleRefresh]);
 
   async function unsave(item: SavedPlaceView) {
     if (busy.current) return;
@@ -106,8 +130,25 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
             {removedName} removed. You can save it again in Explore.
           </Text>
         )}
+        {scheduleError && (
+          <Text style={styles.message}>Could not refresh itinerary locations.</Text>
+        )}
       </View>
-      {loading ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: journalOpen }}
+        onPress={() => setJournalOpen((value) => !value)}
+        style={[styles.action, { marginHorizontal: 20 }]}
+      >
+        <Text style={styles.link}>
+          {journalOpen ? 'Back to saved places' : 'Visits & rankings'}
+        </Text>
+      </Pressable>
+      {journalOpen ? (
+        <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+          <PlaceJournal refreshKey={refreshKey} />
+        </ScrollView>
+      ) : loading ? (
         <ActivityIndicator accessibilityLabel="Loading saved places" color={colors.primary} />
       ) : (
         <FlatList
@@ -136,8 +177,26 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
                 <Text style={styles.placeName}>{item.place.name}</Text>
                 <Text style={styles.link}>See place →</Text>
               </Pressable>
+              {trips.map((trip) => {
+                const days = [
+                  ...new Set(
+                    trip.scheduledPlaces
+                      ?.filter((stop) => stop.placeId === item.place.id)
+                      .map((stop) => stop.day),
+                  ),
+                ].sort((a, b) => a - b);
+                return days.map((day) => (
+                  <Text key={`${trip.id}-${day}`} style={[styles.message, styles.schedule]}>
+                    Scheduled in {trip.city} (trip starts {formatDate(trip.startDate)}) ·{' '}
+                    {itineraryDayLabel(trip.startDate, day)}
+                  </Text>
+                ));
+              })}
               <View style={{ marginTop: 10 }}>
-                <AddToItinerary place={item.place} />
+                <AddToItinerary
+                  place={item.place}
+                  onChanged={() => setScheduleRefresh((value) => value + 1)}
+                />
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -195,6 +254,7 @@ const styles = StyleSheet.create({
   },
   link: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   message: { color: colors.muted, fontSize: 14, lineHeight: 21 },
+  schedule: { marginTop: 8, color: colors.ink },
   empty: { gap: 16 },
   primary: {
     ...buttonOutline,

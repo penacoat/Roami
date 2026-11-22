@@ -4,11 +4,16 @@ import * as api from '../src/api/ApiClient';
 import { resetFixtures } from '../src/api';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { pickTime } from '../test-utils/timePicker';
 import { TripCreationScreen } from '../src/screens/TripCreationScreen';
 
 jest.mock(
   'react-native-safe-area-context',
   () => require('react-native-safe-area-context/jest/mock').default,
+);
+
+jest.mock('@react-native-community/datetimepicker', () =>
+  require('../test-utils/timePicker').timePickerModule(),
 );
 
 const onSignOut = jest.fn<() => Promise<void>>();
@@ -63,7 +68,15 @@ it('keeps the form and allows retry when the trip service fails', async () => {
 it('rejects reversed daily hours', async () => {
   await render(<TripCreationScreen onSignOut={onSignOut} />);
   await chooseDayTrip();
-  await fireEvent.changeText(screen.getByLabelText('Start of day, 24-hour time'), '22:00');
+  await pickTime('End time', 8);
   await fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
   expect(screen.getByRole('alert')).toHaveTextContent(/Daily end time must be after/);
+});
+
+it('uses a planning-hours preset for a newly created trip', async () => {
+  await render(<TripCreationScreen onSignOut={onSignOut} />);
+  await chooseDayTrip();
+  await fireEvent.press(screen.getByRole('button', { name: /Daytime/ }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+  await screen.findByText('Daily hours · 9:00am – 5:00pm');
 });

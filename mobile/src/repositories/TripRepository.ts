@@ -11,11 +11,13 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 
+import { readCost } from '../logic/stopDetails';
 import { db } from './firestore';
 
 // Match COLLECTIONS in shared/src/models.ts (the app can import only types from shared).
 const TRIPS = 'trips';
 const TRIP_STOPS = 'tripStops';
+const TRIP_SHARES = 'tripShares';
 const PLACES = 'places';
 
 /**
@@ -79,6 +81,7 @@ function toStop(id: string, data: DocumentData): TripStop {
     isFixed: data.isFixed === true,
     isRequired: data.isRequired === true,
     warnings: Array.isArray(data.warnings) ? data.warnings.map(String) : [],
+    ...(data.cost !== undefined && { cost: readCost(data.cost) }),
   };
 }
 
@@ -119,6 +122,7 @@ function stopDocument(stop: TripStop): DocumentData {
     isFixed: stop.isFixed,
     isRequired: stop.isRequired,
     warnings: stop.warnings,
+    ...(stop.cost !== undefined && { cost: stop.cost }),
   };
 }
 
@@ -180,10 +184,9 @@ export interface TripChangeReader {
 /**
  * Saves a trip change in one transaction, so it applies fully or not at all.
  *
- * The stops are read first, then the trip is read inside the transaction and
- * handed to `decide` with those stops. Every stop change must raise the trip's
- * revision (the security rules enforce this), so if the trip's revision is the
- * one the caller expected, the stops read beforehand are still current.
+ * Read the trip before querying its stops on each transaction attempt. Every
+ * stop write bumps the trip revision, so Firestore retries if a writer commits
+ * while this attempt is reading the stops.
  *
  * `decide` returns the change to save, or null to save nothing. It gets null for
  * the trip and stops when the trip doesn't exist or the user can't view it.
@@ -195,21 +198,19 @@ export async function saveTripChange(
     trip: Trip | null,
     stops: TripStop[],
     reader: TripChangeReader,
-  ) => Promise<TripChange | null>,
+  ) => Promise<TripChange | { deleteTrip: true } | null>,
 ): Promise<void> {
-  const stops = await listStops(tripId);
   const tripRef = doc(db, TRIPS, tripId);
 
   await runTransaction(db, async (transaction) => {
     let trip: Trip | null = null;
-    if (stops !== null) {
-      try {
-        const snapshot = await transaction.get(tripRef);
-        trip = snapshot.exists() ? toTrip(snapshot.id, snapshot.data()) : null;
-      } catch (error) {
-        if (!isPermissionDenied(error)) throw error;
-      }
+    try {
+      const snapshot = await transaction.get(tripRef);
+      trip = snapshot.exists() ? toTrip(snapshot.id, snapshot.data()) : null;
+    } catch (error) {
+      if (!isPermissionDenied(error)) throw error;
     }
+    const stops = trip ? await listStops(tripId) : null;
 
     const reader: TripChangeReader = {
       async placeExists(placeId) {
@@ -217,8 +218,17 @@ export async function saveTripChange(
         return snapshot.exists();
       },
     };
-    const change = await decide(trip, trip ? (stops ?? []) : [], reader);
+    const change = await decide(stops ? trip : null, stops ?? [], reader);
     if (!change) return;
+
+    if ('deleteTrip' in change) {
+      for (const stop of stops ?? []) {
+        transaction.delete(doc(db, TRIP_STOPS, stop.id));
+      }
+      transaction.delete(doc(db, TRIP_SHARES, tripId));
+      transaction.delete(tripRef);
+      return;
+    }
 
     transaction.set(tripRef, tripDocument(change.trip));
     for (const stop of change.stopsToSave ?? []) {

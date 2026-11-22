@@ -1,5 +1,6 @@
 import type {
   PlaceId,
+  KnownCost,
   RecommendationId,
   StartingPoint,
   Trip,
@@ -37,6 +38,7 @@ export interface PlaceSummary {
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not closed
+  cost?: KnownCost;
   missingFields: string[];
 }
 
@@ -77,6 +79,7 @@ export interface TripSummary {
   endDate: string;
   candidateCount: number;
   stopCount: number;
+  scheduledPlaces?: { placeId: string; day: number }[];
 }
 
 export interface TripStopView extends TripStop {
@@ -86,6 +89,7 @@ export interface TripStopView extends TripStop {
 /** One trip with everything the list, map, and day views need. */
 export interface TripView {
   trip: Trip;
+  canEdit?: boolean; // false for a shared itinerary
   candidates: PlaceSummary[]; // saved for the trip but not scheduled
   stops: TripStopView[]; // scheduled, ordered by day then order
 }

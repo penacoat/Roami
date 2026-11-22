@@ -13,6 +13,7 @@ import {
 
 import { callApi, getApiMode } from '../../api';
 import { buttonOutline } from '../../components/buttonStyles';
+import { VisitPlace } from '../../components/PlaceJournal';
 import { AddToItinerary } from '../../components/AddToItinerary';
 import { colors } from './theme';
 
@@ -144,6 +145,7 @@ export function PlaceDetails({
           </Text>
         </Pressable>
         <AddToItinerary place={place} />
+        <VisitPlace place={place} />
         {notice !== '' && (
           <Text
             accessibilityRole={saveFailed ? 'alert' : undefined}

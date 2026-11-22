@@ -17,8 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import type { Trip } from '@roami/shared';
-import { callApi } from '../api';
+import { ApiError, callApi } from '../api';
 import { buttonOutline } from '../components/buttonStyles';
+import { minutesOfDay } from '../logic/trips';
+import { timeFromMinutes, formatTime } from '../trips/stopTime';
+import { TimeRangePicker } from '../trips/TimeRangePicker';
 import { TripCalendar } from '../trips/TripCalendar';
 import { formatDate, tripDays, validateTripDraft, type TripDraft } from '../trips/tripDraft';
 import { tripTheme as theme } from '../trips/tripTheme';
@@ -74,8 +77,12 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
       setCreatedTrip(result.trip.trip);
       scroll.current?.scrollTo({ y: 0, animated: false });
       onCreated?.(result.trip.trip.id);
-    } catch {
-      setError('We couldn’t save your trip. Please try again.');
+    } catch (failure) {
+      setError(
+        failure instanceof ApiError && failure.code === 'invalid-argument'
+          ? failure.message
+          : 'We couldn’t save your trip. Please try again.',
+      );
     } finally {
       busy.current = false;
       setSaving(false);
@@ -172,7 +179,8 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
                   {createdTrip.startDate === createdTrip.endDate ? 'day' : 'days'} to explore
                 </Text>
                 <Text style={styles.summaryText}>
-                  Daily hours · {createdTrip.dailyWindow.start}–{createdTrip.dailyWindow.end}
+                  Daily hours · {formatTime(createdTrip.dailyWindow.start)} –{' '}
+                  {formatTime(createdTrip.dailyWindow.end)}
                 </Text>
               </View>
               {error ? (
@@ -272,38 +280,17 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
               <View style={styles.card}>
                 <Text style={styles.sectionNumber}>03 · DAILY HOURS</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
-                  Planning hours · 24h
+                  Daily planning hours
                 </Text>
-                <View style={styles.timeRow}>
-                  <View style={styles.flex}>
-                    <Text style={styles.label}>Start of day</Text>
-                    <TextInput
-                      accessibilityLabel="Start of day, 24-hour time"
-                      style={styles.input}
-                      value={draft.dayStart}
-                      onChangeText={(dayStart) => update({ dayStart })}
-                      placeholder="09:00"
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      autoCorrect={false}
-                      editable={!saving && !signingOut}
-                    />
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.label}>End of day</Text>
-                    <TextInput
-                      accessibilityLabel="End of day, 24-hour time"
-                      style={styles.input}
-                      value={draft.dayEnd}
-                      onChangeText={(dayEnd) => update({ dayEnd })}
-                      placeholder="21:00"
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      autoCorrect={false}
-                      editable={!saving && !signingOut}
-                    />
-                  </View>
-                </View>
+                <TimeRangePicker
+                  planning
+                  start={minutesOfDay(draft.dayStart)}
+                  end={minutesOfDay(draft.dayEnd)}
+                  disabled={saving || signingOut}
+                  onChange={(start, end) =>
+                    update({ dayStart: timeFromMinutes(start), dayEnd: timeFromMinutes(end) })
+                  }
+                />
               </View>
             </>
           )}
@@ -471,7 +458,6 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.muted, fontSize: 9, letterSpacing: 1.2, fontWeight: '700' },
   dateValue: { color: theme.ink, fontSize: 13, fontWeight: '600' },
   dateArrow: { color: theme.ink, fontSize: 18 },
-  timeRow: { flexDirection: 'row', gap: 14 },
   footer: {
     width: '100%',
     maxWidth: 600,

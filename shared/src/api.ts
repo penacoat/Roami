@@ -1,4 +1,4 @@
-import type { PlaceId, RecommendationId, StartingPoint, TripId, TripStopId } from './models';
+import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
 import type {
   PlaceSummary,
   PublicUser,
@@ -150,7 +150,7 @@ export interface CreateTripResponse {
 }
 
 export interface ListTripsRequest {
-  // no fields
+  includeScheduledPlaces?: boolean;
 }
 export interface ListTripsResponse {
   trips: TripSummary[];
@@ -161,6 +161,11 @@ export interface GetTripRequest {
 }
 export interface GetTripResponse {
   trip: TripView;
+}
+
+export interface DeleteTripRequest {
+  tripId: TripId;
+  expectedRevision: number;
 }
 
 /** Adding a candidate does not schedule it. Does not need expectedRevision. */
@@ -198,6 +203,22 @@ export interface AddStopResponse {
   trip: TripView;
 }
 
+export interface AddFixedActivityRequest {
+  tripId: TripId;
+  expectedRevision: number;
+  day: number;
+  title: string;
+  startTime: string;
+  visitMinutes: number;
+}
+
+export interface ApplyItineraryRequest {
+  tripId: TripId;
+  expectedRevision: number;
+  placeIds: PlaceId[];
+  strategy: 'earlier' | 'later';
+}
+
 export interface MoveStopRequest {
   tripId: TripId;
   expectedRevision: number;
@@ -226,9 +247,38 @@ export interface UpdateStopTimeRequest {
   stopId: TripStopId;
   startTime: string | null;
   visitMinutes: number;
+  // Calendar placement rejects overlaps with any timed activity.
+  requireOpenSlot?: boolean;
 }
 export interface UpdateStopTimeResponse {
   trip: TripView;
+}
+
+export interface UpdateStopDetailsRequest {
+  tripId: TripId;
+  expectedRevision: number;
+  stopId: TripStopId;
+  isRequired?: boolean;
+  cost?: KnownCost | null;
+}
+
+export interface StopPreparationRequest {
+  tripId: TripId;
+  stopId: TripStopId;
+}
+
+export interface SavePreparationRequest extends StopPreparationRequest {
+  taskId?: string;
+  title: string;
+  bookingUrl: string | null;
+  deadline: string | null;
+  completed: boolean;
+  reviewSchedule?: boolean;
+}
+
+export interface PlaceJournalResponse {
+  visited: { place: PlaceSummary; visitDate: string }[];
+  rankings: Ranking[];
 }
 
 // ---------- The contract ----------
@@ -259,12 +309,22 @@ export interface ApiContract {
   createTrip: { request: CreateTripRequest; response: CreateTripResponse };
   listTrips: { request: ListTripsRequest; response: ListTripsResponse };
   getTrip: { request: GetTripRequest; response: GetTripResponse };
+  deleteTrip: { request: DeleteTripRequest; response: { deleted: true } };
   addCandidate: { request: AddCandidateRequest; response: AddCandidateResponse };
   removeCandidate: { request: RemoveCandidateRequest; response: RemoveCandidateResponse };
   addStop: { request: AddStopRequest; response: AddStopResponse };
+  addFixedActivity: { request: AddFixedActivityRequest; response: AddStopResponse };
+  applyItinerary: { request: ApplyItineraryRequest; response: AddStopResponse };
   moveStop: { request: MoveStopRequest; response: MoveStopResponse };
   removeStop: { request: RemoveStopRequest; response: RemoveStopResponse };
   updateStopTime: { request: UpdateStopTimeRequest; response: UpdateStopTimeResponse };
+  updateStopDetails: { request: UpdateStopDetailsRequest; response: AddStopResponse };
+  listPreparation: { request: StopPreparationRequest; response: { tasks: PreparationTask[] } };
+  savePreparation: { request: SavePreparationRequest; response: { task: PreparationTask } };
+  removePreparation: { request: StopPreparationRequest & { taskId: string }; response: { deleted: true } };
+  getPlaceJournal: { request: Record<string, never>; response: PlaceJournalResponse };
+  markVisited: { request: { placeId: PlaceId; visitDate: string }; response: { visit: Visit } };
+  saveRanking: { request: { category: string; placeIds: PlaceId[] }; response: PlaceJournalResponse };
 }
 
 export type ApiFunctionName = keyof ApiContract;

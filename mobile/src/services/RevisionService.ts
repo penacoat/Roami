@@ -2,28 +2,35 @@
 // (expectedRevision). If the trip changed since then, the change is refused with
 // 'aborted' and nothing is saved; on success the trip's revision rises by one.
 import type {
+  AddFixedActivityRequest,
   AddStopRequest,
   AddStopResponse,
+  ApplyItineraryRequest,
   MoveStopRequest,
   MoveStopResponse,
   RemoveStopRequest,
   RemoveStopResponse,
   UpdateStopTimeRequest,
+  UpdateStopDetailsRequest,
   UpdateStopTimeResponse,
   Trip,
   TripStop,
 } from '@roami/shared';
 
 import { ApiError } from '../api';
+import { itineraryChanges, planItinerary } from '../logic/itineraryPlan';
+import { planStopDetails } from '../logic/stopDetails';
 import {
+  applyPositions,
   planAddStop,
+  planFixedActivity,
   planMoveStop,
   planRemoveStop,
   tripDayCount,
+  validateActivityOverlap,
   validateStopDetails,
   validateStopTime,
   type Result,
-  type StopPosition,
 } from '../logic/trips';
 import {
   newStopId,
@@ -32,6 +39,7 @@ import {
   type TripChangeReader,
 } from '../repositories/TripRepository';
 import {
+  checkTripRevision,
   loadTripView,
   nextRevision,
   requireOwnedTrip,
@@ -39,13 +47,6 @@ import {
   requireTripId,
   requireUserId,
 } from './TripService';
-
-function requireRevision(expectedRevision: unknown): number {
-  if (!Number.isInteger(expectedRevision) || (expectedRevision as number) < 1) {
-    throw new ApiError('invalid-argument', 'Reload the trip and try again.');
-  }
-  return expectedRevision as number;
-}
 
 function unwrap<T>(result: Result<T>): T {
   if (!result.ok) throw new ApiError('invalid-argument', result.error);
@@ -58,13 +59,6 @@ function requireStop(stops: TripStop[], stopId: unknown): TripStop {
   return stop;
 }
 
-function applyPositions(stops: TripStop[], positions: StopPosition[]): TripStop[] {
-  return positions.flatMap((p) => {
-    const stop = stops.find((s) => s.id === p.id);
-    return stop ? [{ ...stop, day: p.day, order: p.order }] : [];
-  });
-}
-
 /**
  * Runs one stop change: checks ownership and the revision inside the
  * transaction, then saves the stops the change returns along with the trip at
@@ -72,7 +66,7 @@ function applyPositions(stops: TripStop[], positions: StopPosition[]): TripStop[
  */
 async function reviseStops(
   tripIdInput: unknown,
-  expectedRevisionInput: unknown,
+  expectedRevision: number,
   change: (
     trip: Trip,
     stops: TripStop[],
@@ -81,16 +75,9 @@ async function reviseStops(
 ) {
   const userId = requireUserId();
   const tripId = requireTripId(tripIdInput);
-  const expectedRevision = requireRevision(expectedRevisionInput);
-
   await saveTripChange(tripId, async (current, stops, reader) => {
     const trip = requireOwnedTrip(current, userId);
-    if (trip.revision !== expectedRevision) {
-      throw new ApiError(
-        'aborted',
-        'This trip changed since you loaded it. Reload it and try again. Nothing was saved.',
-      );
-    }
+    checkTripRevision(trip, expectedRevision);
     const stopChanges = await change(trip, stops, reader);
     return stopChanges ? { trip: nextRevision(trip), ...stopChanges } : null;
   });
@@ -136,7 +123,39 @@ export async function addStop(request: AddStopRequest): Promise<AddStopResponse>
         isRequired: false,
         warnings: [],
       };
+      unwrap(validateActivityOverlap(stops, newStop));
       return { stopsToSave: [newStop, ...applyPositions(stops, plan.moved)] };
+    },
+  );
+  return { trip };
+}
+
+export async function addFixedActivity(request: AddFixedActivityRequest): Promise<AddStopResponse> {
+  const trip = await reviseStops(
+    request.tripId,
+    request.expectedRevision,
+    async (current, stops) => {
+      const { stop, moved } = unwrap(planFixedActivity(current, stops, newStopId(), request));
+      return { stopsToSave: [stop, ...applyPositions(stops, moved)] };
+    },
+  );
+  return { trip };
+}
+
+export async function applyItinerary(request: ApplyItineraryRequest): Promise<AddStopResponse> {
+  const trip = await reviseStops(
+    request.tripId,
+    request.expectedRevision,
+    async (current, stops, reader) => {
+      const plan = unwrap(planItinerary(current, stops, request.placeIds, request.strategy));
+      const changes = itineraryChanges(stops, plan);
+      const newPlaces = changes.filter((stop) => stop.id === null);
+      const exists = await Promise.all(newPlaces.map((stop) => reader.placeExists(stop.placeId!)));
+      if (exists.includes(false))
+        throw new ApiError('not-found', 'A suggested place is unavailable. Reload the trip.');
+      return changes.length
+        ? { stopsToSave: changes.map((stop) => ({ ...stop, id: stop.id ?? newStopId() })) }
+        : null;
     },
   );
   return { trip };
@@ -147,7 +166,7 @@ export async function moveStop(request: MoveStopRequest): Promise<MoveStopRespon
     request.tripId,
     request.expectedRevision,
     async (current, stops) => {
-      requireStop(stops, request.stopId);
+      const stop = requireStop(stops, request.stopId);
       const positions = unwrap(
         planMoveStop(stops, tripDayCount(current.startDate, current.endDate), {
           stopId: request.stopId,
@@ -155,6 +174,8 @@ export async function moveStop(request: MoveStopRequest): Promise<MoveStopRespon
           order: request.order,
         }),
       );
+      if (stop.day !== request.day)
+        unwrap(validateActivityOverlap(stops, { ...stop, day: request.day }));
       // Already in that spot: save nothing and keep the revision.
       if (positions.length === 0) return null;
       return { stopsToSave: applyPositions(stops, positions) };
@@ -191,8 +212,26 @@ export async function updateStopTime(
       const stop = requireStop(stops, request.stopId);
       // Same time and length: save nothing and keep the revision.
       if (stop.startTime === startTime && stop.visitMinutes === request.visitMinutes) return null;
-      return { stopsToSave: [{ ...stop, startTime, visitMinutes: request.visitMinutes }] };
+      if (request.requireOpenSlot && stop.isFixed) {
+        throw new ApiError('invalid-argument', 'Fixed activities stay at their scheduled time.');
+      }
+      const updated = { ...stop, startTime, visitMinutes: request.visitMinutes };
+      unwrap(validateActivityOverlap(stops, updated, request.requireOpenSlot));
+      return { stopsToSave: [updated] };
     },
+  );
+  return { trip };
+}
+
+export async function updateStopDetails(
+  request: UpdateStopDetailsRequest,
+): Promise<AddStopResponse> {
+  const trip = await reviseStops(
+    request.tripId,
+    request.expectedRevision,
+    async (_current, stops) => ({
+      stopsToSave: [unwrap(planStopDetails(requireStop(stops, request.stopId), request))],
+    }),
   );
   return { trip };
 }

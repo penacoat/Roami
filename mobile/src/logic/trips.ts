@@ -7,6 +7,7 @@ export const MAX_TRIP_DAYS = 7;
 export const MAX_STOPS_PER_DAY = 5;
 export const MAX_CANDIDATES = 50;
 export const MAX_STARTING_POINTS = 5;
+export const DEFAULT_VISIT_MINUTES = 60;
 export const MAX_VISIT_MINUTES = 720;
 export const MAX_RECOMMENDATIONS_PER_STOP = 25;
 const MAX_CITY_LENGTH = 100;
@@ -141,6 +142,73 @@ export function validateStopTime(details: {
   return ok(null);
 }
 
+export function validateActivityOverlap(
+  stops: TripStop[],
+  stop: Pick<TripStop, 'day' | 'isFixed' | 'startTime' | 'visitMinutes'> & { id?: string },
+  requireOpenSlot = false,
+): Result<null> {
+  if (stop.startTime === null) {
+    return stop.isFixed ? fail('Choose a time for this fixed activity.') : ok(null);
+  }
+  const start = minutesOfDay(stop.startTime);
+  const end = start + stop.visitMinutes;
+  const conflict = stops.find((other) => {
+    if (
+      other.id === stop.id ||
+      other.day !== stop.day ||
+      other.startTime === null ||
+      (!requireOpenSlot && !other.isFixed && !stop.isFixed)
+    )
+      return false;
+    const otherStart = minutesOfDay(other.startTime);
+    return start < otherStart + other.visitMinutes && otherStart < end;
+  });
+  if (!conflict) return ok(null);
+  return fail(
+    conflict.title
+      ? `This time overlaps “${conflict.title}”.`
+      : 'This time overlaps a scheduled activity.',
+  );
+}
+
+export function planFixedActivity(
+  trip: { id: string; startDate: string; endDate: string },
+  stops: TripStop[],
+  id: string,
+  activity: { title: string; day: number; startTime: string; visitMinutes: number },
+): Result<{ stop: TripStop; moved: StopPosition[] }> {
+  const title = typeof activity.title === 'string' ? activity.title.trim() : '';
+  if (!title || title.length > 200) return fail('Enter an activity name of up to 200 characters.');
+  const time = validateStopTime(activity);
+  if (!time.ok) return time;
+  const stop: TripStop = {
+    id,
+    tripId: trip.id,
+    placeId: null,
+    title,
+    recommendationIds: [],
+    day: activity.day,
+    order: 1,
+    startTime: activity.startTime,
+    visitMinutes: activity.visitMinutes,
+    walkingMinutesFromPrevious: null,
+    isFixed: true,
+    isRequired: false,
+    warnings: [],
+  };
+  const overlap = validateActivityOverlap(stops, stop);
+  if (!overlap.ok) return overlap;
+  const next = stopsOnDay(stops, stop.day).find(
+    (s) => s.startTime && s.startTime > activity.startTime,
+  );
+  const planned = planAddStop(stops, tripDayCount(trip.startDate, trip.endDate), {
+    ...stop,
+    order: next?.order,
+  });
+  if (!planned.ok) return planned;
+  return ok({ stop: { ...stop, ...planned.value.position }, moved: planned.value.moved });
+}
+
 function checkDay(day: number, dayCount: number): string | null {
   if (!Number.isInteger(day) || day < 1 || day > dayCount) {
     return dayCount === 1 ? 'This trip has only day 1.' : `Choose a day from 1 to ${dayCount}.`;
@@ -182,14 +250,14 @@ function changedOnly(stops: TripStop[], positions: StopPosition[], keepId?: stri
 export function planAddStop(
   stops: TripStop[],
   dayCount: number,
-  newStop: { id: string; placeId: string; day: number; order?: number },
+  newStop: { id: string; placeId: string | null; day: number; order?: number },
 ): Result<{ position: StopPosition; moved: StopPosition[] }> {
   const dayProblem = checkDay(newStop.day, dayCount);
   if (dayProblem) return fail(dayProblem);
   if (newStop.order !== undefined && (!Number.isInteger(newStop.order) || newStop.order < 1)) {
     return fail('Order must be 1 or more.');
   }
-  if (stops.some((s) => s.placeId === newStop.placeId)) {
+  if (newStop.placeId !== null && stops.some((s) => s.placeId === newStop.placeId)) {
     return fail('That place is already scheduled in this trip.');
   }
   const dayStops = stopsOnDay(stops, newStop.day);
@@ -215,6 +283,7 @@ export function planMoveStop(
 ): Result<StopPosition[]> {
   const stop = stops.find((s) => s.id === move.stopId);
   if (!stop) return fail('That stop is not in this trip.');
+  if (stop.isFixed) return fail('Fixed activities stay on their scheduled day and time.');
   const dayProblem = checkDay(move.day, dayCount);
   if (dayProblem) return fail(dayProblem);
   if (!Number.isInteger(move.order) || move.order < 1) return fail('Order must be 1 or more.');
@@ -236,4 +305,11 @@ export function planRemoveStop(stops: TripStop[], stopId: string): Result<StopPo
   if (!stop) return fail('That stop is not in this trip.');
   const positions = placeInDay(stopsOnDay(stops, stop.day, stop.id), stop.day, null, 1);
   return ok(changedOnly(stops, positions));
+}
+
+export function applyPositions(stops: TripStop[], positions: StopPosition[]): TripStop[] {
+  return positions.flatMap((p) => {
+    const stop = stops.find((s) => s.id === p.id);
+    return stop ? [{ ...stop, day: p.day, order: p.order }] : [];
+  });
 }

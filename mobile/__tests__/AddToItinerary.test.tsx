@@ -85,7 +85,7 @@ it('explains an impossible time without adding, and can drop the time', async ()
   expect(saved.stops[0]).toMatchObject({ startTime: null, visitMinutes: 60 });
 });
 
-it('blocks duplicate places on the same day but permits a different day', async () => {
+it('shows the scheduled day and blocks a duplicate anywhere in that trip', async () => {
   const trip = await create();
   await callApi('addStop', {
     tripId: trip.trip.id,
@@ -96,9 +96,9 @@ it('blocks duplicate places on the same day but permits a different day', async 
   });
   await choose('Seattle');
   expect(screen.getByRole('button', { name: 'Add place' })).toBeDisabled();
-  expect(screen.getByText('Already on this day.')).toBeTruthy();
+  expect(screen.getByText(/Already scheduled · Day 1/)).toBeTruthy();
   await fireEvent.press(screen.getByRole('button', { name: /Day 2/ }));
-  expect(screen.getByRole('button', { name: 'Add place' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Add place' })).toBeDisabled();
 });
 
 it('reloads a stale itinerary and waits for an explicit retry before saving', async () => {
@@ -138,4 +138,14 @@ it('explains how to create an itinerary when none exist', async () => {
   await fireEvent.press(screen.getByRole('button', { name: /Add .* to an itinerary/ }));
   await screen.findByText('Create an itinerary in the Itineraries tab first.');
   expect(screen.queryByRole('button', { name: 'Add place' })).toBeNull();
+});
+
+it('saves a selected place as a suggestion for generation', async () => {
+  const trip = await create();
+  await choose('Seattle');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save as a trip suggestion' }));
+  await screen.findByText('Saved as a suggestion for Seattle.');
+  const { trip: saved } = await callApi('getTrip', { tripId: trip.trip.id });
+  expect(saved.candidates.map((place) => place.id)).toEqual(['p-jazz']);
+  expect(saved.stops).toHaveLength(0);
 });

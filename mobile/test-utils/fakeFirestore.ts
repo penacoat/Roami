@@ -199,7 +199,10 @@ function checkWrite(
   const previous = before.get(path);
 
   if (collectionName === 'trips') {
-    if (!next) throw deny('trips cannot be deleted');
+    if (!next) {
+      if (previous?.ownerId !== uid) throw deny('only the owner can delete a trip');
+      return;
+    }
     if (!sameKeys(next, TRIP_FIELDS)) throw deny(`trip fields ${Object.keys(next).join(',')}`);
     if (next.id !== id) throw deny('trip id must match the document ID');
     if (typeof next.revision !== 'number' || !Number.isInteger(next.revision)) {
@@ -225,12 +228,14 @@ function checkWrite(
     if (tripOwner(before, tripId) !== uid) throw deny('only the trip owner can change stops');
     if (previous && next && next.tripId !== previous.tripId) throw deny('stop cannot change trip');
     const tripBefore = before.get(`trips/${String(tripId)}`) as Data;
-    const tripAfter = after.get(`trips/${String(tripId)}`) as Data;
-    if (tripAfter.revision !== (tripBefore.revision as number) + 1) {
+    const tripAfter = after.get(`trips/${String(tripId)}`);
+    if (!next && !tripAfter) return;
+    if (tripAfter?.revision !== (tripBefore.revision as number) + 1) {
       throw deny('a stop change must raise the trip revision by one in the same batch');
     }
     if (!next) return;
-    if (!sameKeys(next, STOP_FIELDS)) throw deny(`stop fields ${Object.keys(next).join(',')}`);
+    if (!sameKeys(next, next.cost === undefined ? STOP_FIELDS : [...STOP_FIELDS, 'cost']))
+      throw deny(`stop fields ${Object.keys(next).join(',')}`);
     if (next.id !== id) throw deny('stop id must match the document ID');
     const day = next.day as number;
     const order = next.order as number;
@@ -241,6 +246,11 @@ function checkWrite(
       throw deny('visitMinutes out of range');
     }
     if (next.placeId === null && next.title === null) throw deny('stop needs a place or title');
+    return;
+  }
+
+  if (collectionName === 'tripShares' && !next) {
+    if (tripOwner(before, id) !== uid) throw deny('only the owner can delete a trip share');
     return;
   }
 

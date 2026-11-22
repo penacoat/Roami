@@ -9,6 +9,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 
+import { readCost } from '../logic/stopDetails';
 import { db } from './firestore';
 
 // Matches COLLECTIONS.places in shared/src/models.ts. It is written out here
@@ -16,12 +17,14 @@ import { db } from './firestore';
 const PLACES = 'places';
 
 function toPlaceSummary(id: string, data: DocumentData): PlaceSummary {
+  const cost = readCost(data.cost);
   return {
     id,
     name: String(data.name ?? ''),
     latitude: Number(data.latitude),
     longitude: Number(data.longitude),
     category: String(data.category ?? ''),
+    ...(cost && { cost }),
     // null means unknown, not closed. Never turn a missing value into a default.
     openingHours: typeof data.openingHours === 'string' ? data.openingHours : null,
     missingFields: Array.isArray(data.missingFields) ? data.missingFields.map(String) : [],

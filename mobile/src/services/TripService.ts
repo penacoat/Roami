@@ -3,6 +3,7 @@ import type {
   AddCandidateResponse,
   CreateTripRequest,
   CreateTripResponse,
+  DeleteTripRequest,
   GetTripRequest,
   GetTripResponse,
   ListTripsRequest,
@@ -67,6 +68,18 @@ export function nextRevision(trip: Trip, patch: Partial<Trip> = {}): Trip {
   return { ...trip, ...patch, revision: trip.revision + 1, updatedAt: new Date().toISOString() };
 }
 
+export function checkTripRevision(trip: Trip, expectedRevision: number): void {
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
+    throw new ApiError('invalid-argument', 'Reload the trip and try again.');
+  }
+  if (trip.revision !== expectedRevision) {
+    throw new ApiError(
+      'aborted',
+      'This trip changed since you loaded it. Reload it and try again.',
+    );
+  }
+}
+
 /**
  * Builds the view the screens use. Candidates are the trip's saved places that
  * are not scheduled as stops yet, so scheduling a candidate moves it out of the
@@ -83,6 +96,7 @@ export async function buildTripView(trip: Trip, stops: TripStop[]): Promise<Trip
 
   return {
     trip,
+    canEdit: trip.ownerId === getCurrentUserId(),
     // A candidate whose place left the catalog is skipped rather than shown blank.
     candidates: candidateIds.flatMap((id) => {
       const place = places.get(id);
@@ -123,7 +137,7 @@ export async function createTrip(request: CreateTripRequest): Promise<CreateTrip
 }
 
 /** The user's own trips, soonest first. Trips shared with the user are not listed. */
-export async function listTrips(_request: ListTripsRequest): Promise<ListTripsResponse> {
+export async function listTrips(request: ListTripsRequest): Promise<ListTripsResponse> {
   const userId = requireUserId();
   const trips = await listTripsOwnedBy(userId);
   const stopLists = await Promise.all(trips.map((t) => listStops(t.id)));
@@ -138,6 +152,9 @@ export async function listTrips(_request: ListTripsRequest): Promise<ListTripsRe
       endDate: trip.endDate,
       candidateCount: trip.candidatePlaceIds.filter((id) => !scheduled.has(id)).length,
       stopCount: stops.length,
+      ...(request.includeScheduledPlaces && {
+        scheduledPlaces: stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
+      }),
     };
   });
   summaries.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id));
@@ -148,6 +165,18 @@ export async function listTrips(_request: ListTripsRequest): Promise<ListTripsRe
 export async function getTrip(request: GetTripRequest): Promise<GetTripResponse> {
   requireUserId();
   return { trip: await loadTripView(requireTripId(request.tripId)) };
+}
+
+export async function deleteTrip(request: DeleteTripRequest): Promise<{ deleted: true }> {
+  const userId = requireUserId();
+  const tripId = requireTripId(request.tripId);
+  await saveTripChange(tripId, async (current) => {
+    if (!current) return null;
+    const trip = requireOwnedTrip(current, userId);
+    checkTripRevision(trip, request.expectedRevision);
+    return { deleteTrip: true };
+  });
+  return { deleted: true };
 }
 
 /** Saves a candidate change, then returns the trip as it is now. */

@@ -8,6 +8,7 @@ import { addStop, moveStop, removeStop, updateStopTime } from '../src/services/R
 import {
   addCandidate,
   createTrip,
+  deleteTrip,
   getTrip,
   listTrips,
   removeCandidate,
@@ -114,6 +115,28 @@ describe('listTrips and getTrip', () => {
     await expect(getTrip({ tripId: view.trip.id })).resolves.toMatchObject({
       trip: { trip: { id: view.trip.id } },
     });
+  });
+});
+
+it('deletes an owned itinerary, its stops, and its share after checking the revision', async () => {
+  const { trip } = await aliceTrip();
+  await addStop({ tripId: trip.id, expectedRevision: 1, placeId: 'p1', day: 1, visitMinutes: 60 });
+  fake.seed(`tripShares/${trip.id}`, { tripId: trip.id, viewerIds: ['bob'] });
+
+  fake.uid = 'bob';
+  await rejectsWith(deleteTrip({ tripId: trip.id, expectedRevision: 2 }), 'permission-denied');
+  fake.uid = 'alice';
+  await rejectsWith(deleteTrip({ tripId: trip.id, expectedRevision: 1 }), 'aborted');
+  expect(fake.all('tripStops')).toHaveLength(1);
+
+  await expect(deleteTrip({ tripId: trip.id, expectedRevision: 2 })).resolves.toEqual({
+    deleted: true,
+  });
+  expect(fake.get(`trips/${trip.id}`)).toBeUndefined();
+  expect(fake.get(`tripShares/${trip.id}`)).toBeUndefined();
+  expect(fake.all('tripStops')).toHaveLength(0);
+  await expect(deleteTrip({ tripId: trip.id, expectedRevision: 2 })).resolves.toEqual({
+    deleted: true,
   });
 });
 
