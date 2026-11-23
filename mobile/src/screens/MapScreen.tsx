@@ -22,6 +22,7 @@ import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
 } from '../hooks/useSavedPlacesChanges';
+import { rankExplorePlaces } from '../logic/exploreSearch';
 import { PlaceDetails } from './map/PlaceDetails';
 import { PlacesPanel } from './map/PlacesPanel';
 import { colors } from './map/theme';
@@ -222,15 +223,19 @@ export function MapScreen({
   }, [results]);
   const visible = useMemo(
     () =>
-      places.filter(
-        (place) =>
-          (!savedOnly || savedPlaces.has(place.id)) &&
-          (category === null || categoryName(place.category) === category) &&
-          (!text ||
-            `${place.name} ${place.category}`.toLowerCase().includes(text.toLowerCase()) ||
-            matches.has(place.id)),
+      rankExplorePlaces(
+        places.filter(
+          (place) =>
+            (!savedOnly || savedPlaces.has(place.id)) &&
+            (category === null || categoryName(place.category) === category) &&
+            (!text ||
+              `${place.name} ${place.category}`.toLowerCase().includes(text.toLowerCase()) ||
+              matches.has(place.id)),
+        ),
+        text,
+        results,
       ),
-    [places, savedOnly, savedPlaces, category, text, matches],
+    [places, savedOnly, savedPlaces, category, text, matches, results],
   );
   const pins = useMemo(() => visible.filter(hasCoordinates), [visible]);
   const fitKey = JSON.stringify(
