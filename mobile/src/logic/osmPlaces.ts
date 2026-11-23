@@ -197,29 +197,48 @@ export function overpassAreaId(relationId: number): number {
 }
 
 /**
- * One request for a city's places. Sights and outdoors come first, then food
- * and shops, each with its own cap, so a city with thousands of restaurants
- * still gets its museums and parks.
+ * A city's places come in two requests, so a big city doesn't time out:
+ *   - 'sights': landmarks, museums, parks and other things to see (the
+ *     request that must work), and
+ *   - 'food': cafés, restaurants, bars and a few kinds of shops, which a city
+ *     like New York has tens of thousands of.
+ * Each is capped, so a huge city still gets its museums and parks.
  */
-export function buildOverpassQuery(relationId: number): string {
-  const area = `area.city`;
+export type OverpassPart = 'sights' | 'food';
+
+export function buildOverpassQuery(relationId: number, part: OverpassPart): string {
+  const area = 'area.city';
+  const filters =
+    part === 'sights'
+      ? [
+          `nwr["tourism"~"^(museum|gallery|attraction|viewpoint|zoo|aquarium|theme_park)$"]["name"](${area});`,
+          `nwr["historic"~"^(monument|castle|fort|landmark)$"]["name"](${area});`,
+          `nwr["amenity"~"^(theatre|arts_centre|cinema|marketplace|library|music_venue|nightclub)$"]["name"](${area});`,
+          `nwr["leisure"~"^(park|garden)$"]["name"](${area});`,
+          `nwr["natural"="beach"]["name"](${area});`,
+        ]
+      : [
+          `nwr["amenity"~"^(cafe|restaurant|bar|pub|ice_cream)$"]["name"](${area});`,
+          `nwr["shop"~"^(books|bakery|chocolate|tea)$"]["name"](${area});`,
+        ];
   return [
     '[out:json][timeout:90];',
     `area(id:${overpassAreaId(relationId)})->.city;`,
     '(',
-    `  nwr["tourism"~"^(museum|gallery|attraction|viewpoint|zoo|aquarium|theme_park)$"]["name"](${area});`,
-    `  nwr["historic"~"^(monument|castle|fort|landmark)$"]["name"](${area});`,
-    `  nwr["amenity"~"^(theatre|arts_centre|cinema|marketplace|library|music_venue|nightclub)$"]["name"](${area});`,
-    `  nwr["leisure"~"^(park|garden)$"]["name"](${area});`,
-    `  nwr["natural"="beach"]["name"](${area});`,
-    ');',
-    'out center tags 1500;',
-    '(',
-    `  nwr["amenity"~"^(cafe|restaurant|bar|pub|ice_cream)$"]["name"](${area});`,
-    `  nwr["shop"~"^(books|bakery|chocolate|tea)$"]["name"](${area});`,
+    ...filters.map((filter) => `  ${filter}`),
     ');',
     'out center tags 1500;',
   ].join('\n');
+}
+
+/** Puts the two parts' answers together for parseOverpass. */
+export function mergeOverpass(...answers: unknown[]): { elements: unknown[] } {
+  const elements: unknown[] = [];
+  for (const answer of answers) {
+    const list = (answer as { elements?: unknown })?.elements;
+    if (Array.isArray(list)) elements.push(...list);
+  }
+  return { elements };
 }
 
 interface OverpassElement {

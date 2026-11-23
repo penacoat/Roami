@@ -80,6 +80,9 @@ export function MapScreen({
   const [cityDraft, setCityDraft] = useState(city);
   const [editingCity, setEditingCity] = useState(false);
   const [cityMatches, setCityMatches] = useState<CityMatch[]>([]);
+  // The center of the city just picked. The map moves there once the city form
+  // has closed (moving it during that layout change can be cancelled).
+  const [cityCenter, setCityCenter] = useState<Region | null>(null);
   const [resolvingCity, setResolvingCity] = useState(false);
   const [cityError, setCityError] = useState('');
   // The load that has been running longer than SLOW_LOAD_MS, if any.
@@ -139,14 +142,17 @@ export function MapScreen({
         setLoadStatus({ key: loadKey, error: '' });
       })
       .catch((failure: unknown) => {
-        if (active)
-          setLoadStatus({
-            key: loadKey,
-            error:
-              failure instanceof ApiError && failure.code === 'unavailable'
-                ? failure.message
-                : 'Could not load places. Check your connection and try again.',
-          });
+        if (!active) return;
+        // Don't leave the previous city's places listed under this city's error.
+        setPlaces([]);
+        setSelected(null);
+        setLoadStatus({
+          key: loadKey,
+          error:
+            failure instanceof ApiError && failure.code === 'unavailable'
+              ? failure.message
+              : 'Could not load places. Check your connection and try again.',
+        });
       })
       .finally(() => clearTimeout(slowTimer));
     return () => {
@@ -393,14 +399,22 @@ export function MapScreen({
     setCategory(null);
     setSelected(null);
     setQuery('');
-    region.current = {
+    setCityCenter({
       latitude: match.latitude,
       longitude: match.longitude,
       latitudeDelta: 0.12,
       longitudeDelta: 0.12,
-    };
-    map.current?.animateToRegion(region.current, 250);
+    });
   }
+  useEffect(() => {
+    if (!cityCenter || editingCity) return;
+    const frame = requestAnimationFrame(() => {
+      region.current = cityCenter;
+      map.current?.animateToRegion(cityCenter, 250);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [cityCenter, editingCity]);
+
   // Looks the name up once, on submit (OpenStreetMap's geocoder doesn't allow
   // search-as-you-type). Same-named cities are listed so the user can pick.
   async function applyCity() {
@@ -768,8 +782,8 @@ export function MapScreen({
                     <ActivityIndicator accessibilityLabel="Loading places" color={colors.primary} />
                     {slowLoad && (
                       <Text style={[styles.caption, styles.slowLoad]}>
-                        Still loading {city}. A city opened for the first time can take up to 30
-                        seconds.
+                        Still loading {city}. A city opened for the first time can take up to a
+                        minute.
                       </Text>
                     )}
                   </View>

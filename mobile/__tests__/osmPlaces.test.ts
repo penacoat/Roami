@@ -13,6 +13,7 @@ import {
   distanceMeters,
   isCurrent,
   isStale,
+  mergeOverpass,
   normalizeName,
   overpassAreaId,
   parseNominatim,
@@ -84,7 +85,20 @@ describe('city IDs', () => {
   });
   it('builds the Overpass area ID from the relation', () => {
     expect(overpassAreaId(186579)).toBe(3600186579);
-    expect(buildOverpassQuery(186579)).toContain('area(id:3600186579)');
+    expect(buildOverpassQuery(186579, 'sights')).toContain('area(id:3600186579)');
+  });
+  it('splits sights from food so a big city does not time out', () => {
+    const sights = buildOverpassQuery(186579, 'sights');
+    const food = buildOverpassQuery(186579, 'food');
+    expect(sights).toContain('museum');
+    expect(sights).not.toContain('restaurant');
+    expect(food).toContain('restaurant');
+    expect(food).not.toContain('museum');
+  });
+  it('merges the two answers, ignoring a missing one', () => {
+    expect(mergeOverpass({ elements: [1] }, null, { elements: [2, 3] })).toEqual({
+      elements: [1, 2, 3],
+    });
   });
 });
 

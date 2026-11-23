@@ -13,6 +13,7 @@ import {
   buildOverpassQuery,
   isCurrent,
   isStale,
+  mergeOverpass,
   parseNominatim,
   parseOverpass,
   planImport,
@@ -92,8 +93,8 @@ export function resetPlaceImports(): void {
 /**
  * Downloads a city's places from OpenStreetMap and stores them: new places are
  * created and stale ones rewritten (planImport). The cityImports record is
- * written last, so if anything fails the next visit tries again. Returns the
- * places now stored for the city.
+ * written last, and only when both downloads worked, so if anything fails the
+ * next visit tries again. Returns the places now stored for the city.
  */
 async function importCity(
   city: string,
@@ -102,15 +103,28 @@ async function importCity(
 ): Promise<PlaceSummary[]> {
   const relationId = relationIdOf(cityId) as number;
   const now = Date.now();
-  let json: unknown;
+  let sights: unknown;
   try {
-    json = await fetchOverpass(buildOverpassQuery(relationId));
-  } catch {
+    sights = await fetchOverpass(buildOverpassQuery(relationId, 'sights'));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[places] Could not download sights in ${city} from OpenStreetMap`, error);
     throw new ApiError(
       'unavailable',
       `Could not load places in ${city} from OpenStreetMap. Check your connection and try again.`,
     );
   }
+  // Food and shops are a second, bigger download. If it fails (it can time out
+  // in a huge city), the sights are still saved and shown, and the city is
+  // not marked as imported, so the next visit tries again.
+  let food: unknown = null;
+  try {
+    food = await fetchOverpass(buildOverpassQuery(relationId, 'food'));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[places] Could not download food and shops in ${city}; will retry`, error);
+  }
+  const json = mergeOverpass(sights, food);
   const fetched = parseOverpass(json, { cityId, name: city }, new Date(now).toISOString());
   const existing = new Map(
     imported
@@ -119,7 +133,7 @@ async function importCity(
   );
   const plan = planImport(fetched, existing, now);
   const written = await writeImportedPlaces([...plan.create, ...plan.update]);
-  await saveCityImport({ cityId, name: city, placeCount: fetched.length });
+  if (food !== null) await saveCityImport({ cityId, name: city, placeCount: fetched.length });
 
   // Everything fetched is stored now: written just now, or left alone because
   // it was already fresh. A place someone else refused to let us write is left out.

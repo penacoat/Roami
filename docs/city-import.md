@@ -11,11 +11,14 @@ downloaded from OSM about once a month, not once per user.
    the name (Portland, Oregon or Portland, Maine). Each city gets an ID from
    its OSM boundary, such as `osm-relation-186579`.
 2. `listPlaces({ city, cityId })` checks `cityImports/{cityId}`.
-   - **No record:** the city is imported now. One Overpass query downloads up
-     to 400 places (landmarks, museums and parks first, then food and shops),
-     the places are written to `places`, and the `cityImports` record is
-     written last. If anything fails, nothing is marked done and the next
-     visit tries again. This can take up to about 30 seconds; the map says so.
+   - **No record:** the city is imported now. Two Overpass queries download
+     sights (landmarks, museums, parks) and then food and shops; up to 400
+     places are kept, best first. They're written to `places`, and the
+     `cityImports` record is written last. If the sights download fails,
+     nothing is saved and the user sees an error. If only the food download
+     fails (it can time out in a huge city like New York), the sights are
+     saved and shown but the city isn't marked done, so the next visit tries
+     again. This can take up to about a minute; the map says so.
    - **Imported in the last 30 days:** the stored places are shown. OSM isn't contacted.
    - **Older than 30 days:** the stored places are shown right away, and the
      city is re-imported in the background. Places still in OSM are

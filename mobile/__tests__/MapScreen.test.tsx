@@ -4,7 +4,7 @@ import { beforeEach, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import * as api from '../src/api/ApiClient';
-import { resetFixtures } from '../src/api';
+import { ApiError, resetFixtures } from '../src/api';
 import { MapScreen } from '../src/screens/MapScreen';
 
 // Keep user interactions real while replacing the native map surface.
@@ -590,8 +590,52 @@ it('explains that a new city can take a while to load', async () => {
     <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
   );
   await screen.findByText(
-    'Still loading Seattle. A city opened for the first time can take up to 30 seconds.',
+    'Still loading Seattle. A city opened for the first time can take up to a minute.',
     {},
     { timeout: 4000 },
+  );
+});
+
+it('clears the previous city when a new city fails to load, and moves the map there', async () => {
+  const { mapCalls } = jest.requireMock<{
+    mapCalls: { animate: jest.Mock; fit: jest.Mock };
+  }>('react-native-maps');
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'resolveCity') {
+      return Promise.resolve({
+        matches: [
+          {
+            cityId: 'osm-relation-175905',
+            name: 'New York',
+            label: 'New York, United States',
+            latitude: 40.71,
+            longitude: -74.0,
+          },
+        ],
+      }) as ReturnType<typeof original>;
+    }
+    if (name === 'listPlaces' && 'cityId' in request) {
+      return Promise.reject(
+        new ApiError('unavailable', 'Could not load places in New York from OpenStreetMap.'),
+      );
+    }
+    return original(name, request);
+  });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByLabelText('Open Pike Place Market');
+  await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'New York');
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await screen.findByText('Could not load places in New York from OpenStreetMap.');
+  expect(screen.queryByLabelText('Open Pike Place Market')).toBeNull();
+  expect(screen.queryByText('50 places')).toBeNull();
+  await waitFor(() =>
+    expect(mapCalls.animate).toHaveBeenCalledWith(
+      expect.objectContaining({ latitude: 40.71, longitude: -74.0 }),
+      250,
+    ),
   );
 });

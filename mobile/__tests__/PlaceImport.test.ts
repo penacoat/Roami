@@ -142,6 +142,7 @@ describe('listPlaces', () => {
   });
 
   it('says places are unavailable when OpenStreetMap is unreachable, and saves nothing', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocked.fetchOverpass.mockRejectedValue(new Error('busy'));
     await rejectsWith(listPlaces({ city: 'Portland', cityId: PORTLAND }), 'unavailable');
     expect(mocked.writeImportedPlaces).not.toHaveBeenCalled();
@@ -171,7 +172,54 @@ describe('listPlaces', () => {
       listPlaces({ city: 'Portland', cityId: PORTLAND }),
       listPlaces({ city: 'Portland', cityId: PORTLAND }),
     ]);
-    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(1);
+    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(2); // sights, then food
+  });
+
+  it('downloads sights and food separately and saves both', async () => {
+    mocked.fetchOverpass.mockImplementation(async (query) =>
+      query.includes('restaurant')
+        ? {
+            elements: [
+              {
+                type: 'node',
+                id: 2,
+                lat: 45.5,
+                lon: -122.6,
+                tags: { name: 'Diner', amenity: 'restaurant' },
+              },
+            ],
+          }
+        : overpass('Art Museum'),
+    );
+    const { places } = await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(places.map((p) => p.name)).toEqual(['Art Museum', 'Diner']);
+    expect(mocked.saveCityImport).toHaveBeenCalledWith({
+      cityId: PORTLAND,
+      name: 'Portland',
+      placeCount: 2,
+    });
+  });
+
+  it('keeps the sights of a huge city when its food download times out, and retries later', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocked.fetchOverpass.mockImplementation(async (query) => {
+      if (query.includes('restaurant')) throw new Error('timed out');
+      return overpass('Art Museum');
+    });
+    const { places } = await listPlaces({ city: 'New York', cityId: 'osm-relation-175905' });
+    expect(places.map((p) => p.name)).toEqual(['Art Museum']);
+    expect(mocked.writeImportedPlaces).toHaveBeenCalled();
+    expect(mocked.saveCityImport).not.toHaveBeenCalled(); // not marked done, so it's retried
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('logs why a download failed', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocked.fetchOverpass.mockRejectedValue(new Error('HTTP 504'));
+    await rejectsWith(listPlaces({ city: 'Portland', cityId: PORTLAND }), 'unavailable');
+    expect(warn.mock.calls[0].join(' ')).toContain('HTTP 504');
+    warn.mockRestore();
   });
 
   it('reads a recently imported city from Firestore only', async () => {
