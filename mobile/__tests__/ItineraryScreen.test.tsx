@@ -82,6 +82,33 @@ it('removes a stop only after the user confirms', async () => {
   expect(await placeIds(tripId)).toEqual(['p-pike']);
 });
 
+it('displays saved starting locations and walking preferences without claiming routes', async () => {
+  const { trip } = await callApi('createTrip', {
+    city: 'Seattle',
+    startDate: '2026-11-10',
+    endDate: '2026-11-10',
+    dailyWindow: { start: '09:00', end: '21:00' },
+    startingPoints: [{ label: 'My hotel' }],
+    walkingLimit: { type: 'duration', value: 45 },
+  });
+  await render(
+    <ItineraryScreen
+      tripId={trip.trip.id}
+      onBack={jest.fn()}
+      onExplore={jest.fn()}
+      onOpenPlace={jest.fn()}
+    />,
+  );
+
+  expect(await screen.findByText('Starting location · My hotel')).toBeOnTheScreen();
+  expect(screen.getByText('Max walking duration · 45 minutes')).toBeOnTheScreen();
+  expect(
+    screen.getByText(
+      'Saved as a planning preference; walking routes and times are not calculated.',
+    ),
+  ).toBeOnTheScreen();
+});
+
 it('rearranges stops within a day', async () => {
   const tripId = await tripWithTwoStops();
   await show(tripId);

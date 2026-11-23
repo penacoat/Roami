@@ -18,6 +18,7 @@ const TRIP_FIELDS = [
   'endDate',
   'dailyWindow',
   'startingPoints',
+  'walkingLimit',
   'candidatePlaceIds',
   'revision',
   'createdAt',
@@ -205,6 +206,50 @@ function checkWrite(
     }
     if (!sameKeys(next, TRIP_FIELDS)) throw deny(`trip fields ${Object.keys(next).join(',')}`);
     if (next.id !== id) throw deny('trip id must match the document ID');
+    const startingPoints = next.startingPoints;
+    if (!Array.isArray(startingPoints) || startingPoints.length > 5) {
+      throw deny('invalid starting points');
+    }
+    for (const point of startingPoints) {
+      if (!point || typeof point !== 'object') throw deny('invalid starting point');
+      const start = point as Data;
+      if (
+        typeof start.label !== 'string' ||
+        start.label.trim().length === 0 ||
+        start.label.length > 100
+      ) {
+        throw deny('invalid starting point label');
+      }
+      const hasLatitude = start.latitude !== undefined;
+      const hasLongitude = start.longitude !== undefined;
+      if (hasLatitude !== hasLongitude) throw deny('starting point coordinates must be paired');
+      if (
+        hasLatitude &&
+        (typeof start.latitude !== 'number' ||
+          !Number.isFinite(start.latitude) ||
+          Math.abs(start.latitude) > 90 ||
+          typeof start.longitude !== 'number' ||
+          !Number.isFinite(start.longitude) ||
+          Math.abs(start.longitude) > 180)
+      ) {
+        throw deny('invalid starting point coordinates');
+      }
+    }
+    const walkingLimit = next.walkingLimit;
+    if (walkingLimit !== null) {
+      if (!walkingLimit || typeof walkingLimit !== 'object') throw deny('invalid walking limit');
+      const limit = walkingLimit as Data;
+      if (
+        (limit.type !== 'distance' && limit.type !== 'duration') ||
+        typeof limit.value !== 'number' ||
+        !Number.isInteger(limit.value) ||
+        limit.value <= 0 ||
+        (limit.type === 'distance' && limit.value > 100_000) ||
+        (limit.type === 'duration' && limit.value > 1_440)
+      ) {
+        throw deny('invalid walking limit');
+      }
+    }
     if (typeof next.revision !== 'number' || !Number.isInteger(next.revision)) {
       throw deny('revision must be an int');
     }

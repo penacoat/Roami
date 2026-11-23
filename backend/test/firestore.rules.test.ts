@@ -317,7 +317,7 @@ describe("reports", () => {
 
 const trip = (uid: string, id: string, revision: number) => ({
   id, ownerId: uid, city: "Seattle", startDate: "2026-11-01", endDate: "2026-11-03",
-  dailyWindow: {start: "09:00", end: "21:00"}, startingPoints: [] as unknown[],
+  dailyWindow: {start: "09:00", end: "21:00"}, startingPoints: [] as unknown[], walkingLimit: null,
   candidatePlaceIds: [] as string[], revision, createdAt: now, updatedAt: now,
 });
 
@@ -340,6 +340,38 @@ const writeStopWithRevision = (uid: string, data: ReturnType<typeof stop>, revis
 describe("trips: who can write and how", () => {
   it("lets a user create their own trip at revision 1", async () => {
     await assertSucceeds(setDoc(doc(as("alice"), "trips/t1"), trip("alice", "t1", 1)));
+  });
+  it("persists a label-only starting point and walking preference", async () => {
+    const data = {
+      ...trip("alice", "t1", 1),
+      startingPoints: [{label: "My hotel"}],
+      walkingLimit: {type: "distance", value: 3500},
+    };
+    const ref = doc(as("alice"), "trips/t1");
+    await assertSucceeds(setDoc(ref, data));
+    const saved = await getDoc(ref);
+    expect(saved.data()?.startingPoints).toEqual(data.startingPoints);
+    expect(saved.data()?.walkingLimit).toEqual(data.walkingLimit);
+  });
+  it("keeps accepting and updating legacy trips without preference fields", async () => {
+    const {startingPoints: _startingPoints, walkingLimit: _walkingLimit, ...legacyTrip} =
+      trip("alice", "t1", 1);
+    await seed("trips/t1", legacyTrip);
+    await assertSucceeds(updateDoc(doc(as("alice"), "trips/t1"), {revision: 2, city: "Portland"}));
+  });
+  it("rejects malformed starting points and walking preferences", async () => {
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "trips/blankStartingPoint"),
+        {...trip("alice", "blankStartingPoint", 1), startingPoints: [{label: "   "}]},
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "trips/invalidWalkingLimit"),
+        {...trip("alice", "invalidWalkingLimit", 1), walkingLimit: {type: "distance", value: 100001}},
+      ),
+    );
   });
   it("blocks creating a trip for someone else", async () => {
     await assertFails(setDoc(doc(as("bob"), "trips/t1"), trip("alice", "t1", 1)));

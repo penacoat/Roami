@@ -150,8 +150,14 @@ export interface SavedPlace {
 
 export interface StartingPoint {
   label: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
+}
+
+/** A user preference for future itinerary planning, not a calculated route constraint. */
+export interface WalkingLimit {
+  type: 'distance' | 'duration';
+  value: number; // meters for distance, minutes for duration
 }
 
 export interface Trip {
@@ -162,6 +168,7 @@ export interface Trip {
   endDate: string;
   dailyWindow: { start: string; end: string }; // "09:00" to "21:00"
   startingPoints: StartingPoint[];
+  walkingLimit: WalkingLimit | null;
   candidatePlaceIds: PlaceId[]; // candidates are not scheduled until they become stops
   revision: number; // increases on every saved change, to detect outdated edits
   createdAt: string;

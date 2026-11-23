@@ -1,17 +1,19 @@
 // Pure trip rules: validation and stop ordering. Plain data in, plain data out.
 // The security rules cannot count or compare dates, so these checks are the only
 // place the limits below are enforced.
-import type { CreateTripRequest, StartingPoint, TripStop } from '@roami/shared';
+import type { CreateTripRequest, StartingPoint, TripStop, WalkingLimit } from '@roami/shared';
 
 export const MAX_TRIP_DAYS = 7;
 export const MAX_STOPS_PER_DAY = 5;
 export const MAX_CANDIDATES = 50;
 export const MAX_STARTING_POINTS = 5;
 export const DEFAULT_VISIT_MINUTES = 60;
+export const MAX_STARTING_POINT_LABEL_LENGTH = 100;
+export const MAX_WALKING_DISTANCE_METERS = 100_000;
+export const MAX_WALKING_DURATION_MINUTES = 1_440;
 export const MAX_VISIT_MINUTES = 720;
 export const MAX_RECOMMENDATIONS_PER_STOP = 25;
 const MAX_CITY_LENGTH = 100;
-const MAX_LABEL_LENGTH = 100;
 
 /** Either a value or a message explaining what is wrong. */
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -44,16 +46,40 @@ export function tripDayCount(startDate: string, endDate: string): number {
 }
 
 function checkStartingPoint(point: StartingPoint): string | null {
+  if (!point || typeof point !== 'object') return 'Each starting point must be a location.';
   if (typeof point.label !== 'string' || point.label.trim().length === 0) {
     return 'Each starting point needs a name.';
   }
-  if (point.label.length > MAX_LABEL_LENGTH) return 'A starting point name is too long.';
+  if (point.label.trim().length > MAX_STARTING_POINT_LABEL_LENGTH) {
+    return 'A starting point name is too long.';
+  }
+  const hasLatitude = point.latitude !== undefined;
+  const hasLongitude = point.longitude !== undefined;
+  if (hasLatitude !== hasLongitude) return 'Enter both coordinates for a starting point.';
+  if (!hasLatitude) return null;
   const { latitude, longitude } = point;
   if (typeof latitude !== 'number' || !Number.isFinite(latitude) || Math.abs(latitude) > 90) {
     return 'A starting point has an invalid location.';
   }
   if (typeof longitude !== 'number' || !Number.isFinite(longitude) || Math.abs(longitude) > 180) {
     return 'A starting point has an invalid location.';
+  }
+  return null;
+}
+
+function checkWalkingLimit(limit: WalkingLimit | null | undefined): string | null {
+  if (limit == null) return null;
+  if (!limit || !['distance', 'duration'].includes(limit.type)) {
+    return 'Choose a valid walking preference.';
+  }
+  if (!Number.isInteger(limit.value) || limit.value <= 0) {
+    return 'Enter a whole-number walking preference greater than zero.';
+  }
+  if (limit.type === 'distance' && limit.value > MAX_WALKING_DISTANCE_METERS) {
+    return 'Walking distance must be at most 100 km.';
+  }
+  if (limit.type === 'duration' && limit.value > MAX_WALKING_DURATION_MINUTES) {
+    return 'Walking duration must be at most 1,440 minutes.';
   }
   return null;
 }
@@ -80,6 +106,7 @@ export function validateNewTrip(request: CreateTripRequest): Result<CreateTripRe
   }
 
   const startingPoints = request.startingPoints ?? [];
+  if (!Array.isArray(startingPoints)) return fail('Starting points must be a list.');
   if (startingPoints.length > MAX_STARTING_POINTS) {
     return fail(`Add at most ${MAX_STARTING_POINTS} starting points.`);
   }
@@ -87,6 +114,8 @@ export function validateNewTrip(request: CreateTripRequest): Result<CreateTripRe
     const problem = checkStartingPoint(point);
     if (problem) return fail(problem);
   }
+  const walkingProblem = checkWalkingLimit(request.walkingLimit);
+  if (walkingProblem) return fail(walkingProblem);
 
   return ok({
     city,
@@ -95,9 +124,11 @@ export function validateNewTrip(request: CreateTripRequest): Result<CreateTripRe
     dailyWindow: { start: dailyWindow.start, end: dailyWindow.end },
     startingPoints: startingPoints.map((p) => ({
       label: p.label.trim(),
-      latitude: p.latitude,
-      longitude: p.longitude,
+      ...(p.latitude !== undefined && p.longitude !== undefined
+        ? { latitude: p.latitude, longitude: p.longitude }
+        : {}),
     })),
+    walkingLimit: request.walkingLimit ?? null,
   });
 }
 

@@ -127,6 +127,7 @@ export async function createTrip(request: CreateTripRequest): Promise<CreateTrip
     endDate: checked.value.endDate,
     dailyWindow: checked.value.dailyWindow,
     startingPoints: checked.value.startingPoints ?? [],
+    walkingLimit: checked.value.walkingLimit ?? null,
     candidatePlaceIds: [],
     revision: 1,
     createdAt: now,

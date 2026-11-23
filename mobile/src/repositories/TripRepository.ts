@@ -1,4 +1,4 @@
-import type { StartingPoint, Trip, TripStop } from '@roami/shared';
+import type { StartingPoint, Trip, TripStop, WalkingLimit } from '@roami/shared';
 import {
   collection,
   doc,
@@ -37,9 +37,24 @@ function isPermissionDenied(error: unknown): boolean {
 function toStartingPoint(data: DocumentData): StartingPoint {
   return {
     label: String(data.label ?? ''),
-    latitude: Number(data.latitude),
-    longitude: Number(data.longitude),
+    ...(typeof data.latitude === 'number' && typeof data.longitude === 'number'
+      ? { latitude: data.latitude, longitude: data.longitude }
+      : {}),
   };
+}
+
+function toWalkingLimit(value: unknown): WalkingLimit | null {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('type' in value) ||
+    !('value' in value) ||
+    (value.type !== 'distance' && value.type !== 'duration') ||
+    typeof value.value !== 'number'
+  ) {
+    return null;
+  }
+  return { type: value.type, value: value.value };
 }
 
 function toTrip(id: string, data: DocumentData): Trip {
@@ -53,6 +68,7 @@ function toTrip(id: string, data: DocumentData): Trip {
     startingPoints: Array.isArray(data.startingPoints)
       ? data.startingPoints.map(toStartingPoint)
       : [],
+    walkingLimit: toWalkingLimit(data.walkingLimit),
     candidatePlaceIds: Array.isArray(data.candidatePlaceIds)
       ? data.candidatePlaceIds.map(String)
       : [],
@@ -96,9 +112,11 @@ function tripDocument(trip: Trip): DocumentData {
     dailyWindow: { start: trip.dailyWindow.start, end: trip.dailyWindow.end },
     startingPoints: trip.startingPoints.map((p) => ({
       label: p.label,
-      latitude: p.latitude,
-      longitude: p.longitude,
+      ...(p.latitude !== undefined && p.longitude !== undefined
+        ? { latitude: p.latitude, longitude: p.longitude }
+        : {}),
     })),
+    walkingLimit: trip.walkingLimit,
     candidatePlaceIds: trip.candidatePlaceIds,
     revision: trip.revision,
     createdAt: trip.createdAt,

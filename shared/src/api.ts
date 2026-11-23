@@ -1,4 +1,15 @@
-import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
+import type {
+  KnownCost,
+  PlaceId,
+  PreparationTask,
+  Ranking,
+  RecommendationId,
+  StartingPoint,
+  TripId,
+  TripStopId,
+  Visit,
+  WalkingLimit,
+} from './models';
 import type {
   CityMatch,
   PlaceSummary,
@@ -162,6 +173,7 @@ export interface CreateTripRequest {
   endDate: string;
   dailyWindow: { start: string; end: string }; // "09:00" to "21:00"
   startingPoints?: StartingPoint[];
+  walkingLimit?: WalkingLimit | null;
 }
 export interface CreateTripResponse {
   trip: TripView;
@@ -340,10 +352,16 @@ export interface ApiContract {
   updateStopDetails: { request: UpdateStopDetailsRequest; response: AddStopResponse };
   listPreparation: { request: StopPreparationRequest; response: { tasks: PreparationTask[] } };
   savePreparation: { request: SavePreparationRequest; response: { task: PreparationTask } };
-  removePreparation: { request: StopPreparationRequest & { taskId: string }; response: { deleted: true } };
+  removePreparation: {
+    request: StopPreparationRequest & { taskId: string };
+    response: { deleted: true };
+  };
   getPlaceJournal: { request: Record<string, never>; response: PlaceJournalResponse };
   markVisited: { request: { placeId: PlaceId; visitDate: string }; response: { visit: Visit } };
-  saveRanking: { request: { category: string; placeIds: PlaceId[] }; response: PlaceJournalResponse };
+  saveRanking: {
+    request: { category: string; placeIds: PlaceId[] };
+    response: PlaceJournalResponse;
+  };
 }
 
 export type ApiFunctionName = keyof ApiContract;
