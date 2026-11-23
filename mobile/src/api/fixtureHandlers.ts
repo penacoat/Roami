@@ -20,6 +20,7 @@ import type {
 
 import { ME, OTHER_USERS, PLACES, RECOMMENDATIONS } from './fixtureData';
 import { ApiError, type ApiHandlers } from './types';
+import { pageAfter } from '../logic/feedPaging';
 import { journalView, validateRanking } from '../logic/journal';
 import { planPreparation, taskWithReview } from '../logic/preparation';
 import { planStopDetails } from '../logic/stopDetails';
@@ -219,6 +220,7 @@ const discoveryHandlers: Pick<
   | 'listSavedPlaces'
   | 'updateSavedNote'
   | 'removeSavedPlace'
+  | 'restoreSavedPlace'
 > = {
   async ensureProfile(request) {
     await delay();
@@ -284,10 +286,8 @@ const discoveryHandlers: Pick<
 
   async getFeed(request) {
     await delay();
-    const items = [...allRecs()]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, request.limit ?? 20);
-    return clone({ items });
+    const { page, nextCursor } = pageAfter(allRecs(), request.cursor, request.limit ?? 20);
+    return clone({ items: page, nextCursor });
   },
 
   async searchRecommendations(request) {
@@ -350,6 +350,20 @@ const discoveryHandlers: Pick<
     await delay();
     saved.delete(request.placeId);
     return { removed: true };
+  },
+
+  async restoreSavedPlace(request) {
+    await delay();
+    const current = saved.get(request.placeId);
+    const known = new Set(allRecs().map((r) => r.id));
+    const ids = request.recommendationIds.filter((id) => known.has(id));
+    saved.set(request.placeId, {
+      placeId: request.placeId,
+      recommendationIds: [...new Set([...(current?.recommendationIds ?? []), ...ids])],
+      personalNote: current?.personalNote || request.personalNote,
+      createdAt: current?.createdAt ?? request.createdAt,
+    });
+    return clone({ saved: savedView(saved.get(request.placeId)!) });
   },
 };
 

@@ -88,9 +88,13 @@ export interface GetFeedRequest {
   city: string;
   cityId?: string;
   limit?: number;
+  /** The `nextCursor` from the previous page. Leave it out to get the newest. */
+  cursor?: string;
 }
 export interface GetFeedResponse {
   items: RecommendationView[];
+  /** Pass this as `cursor` to get the next page. Null or missing means there are no more. */
+  nextCursor?: string | null;
 }
 
 export interface SearchRecommendationsRequest {
@@ -152,6 +156,22 @@ export interface RemoveSavedPlaceRequest {
 }
 export interface RemoveSavedPlaceResponse {
   removed: true;
+}
+
+/**
+ * Puts back a place that was just removed (the Undo button), with its original
+ * save date, note, and recommendation sources. Sources that are no longer
+ * available are dropped. If the place was saved again in the meantime, the two
+ * are merged and nothing already saved is overwritten.
+ */
+export interface RestoreSavedPlaceRequest {
+  placeId: PlaceId;
+  recommendationIds: RecommendationId[];
+  personalNote: string;
+  createdAt: string;
+}
+export interface RestoreSavedPlaceResponse {
+  saved: SavedPlaceView;
 }
 
 // ---------- Trips ----------
@@ -325,6 +345,7 @@ export interface ApiContract {
   listSavedPlaces: { request: ListSavedPlacesRequest; response: ListSavedPlacesResponse };
   updateSavedNote: { request: UpdateSavedNoteRequest; response: UpdateSavedNoteResponse };
   removeSavedPlace: { request: RemoveSavedPlaceRequest; response: RemoveSavedPlaceResponse };
+  restoreSavedPlace: { request: RestoreSavedPlaceRequest; response: RestoreSavedPlaceResponse };
   createTrip: { request: CreateTripRequest; response: CreateTripResponse };
   listTrips: { request: ListTripsRequest; response: ListTripsResponse };
   getTrip: { request: GetTripRequest; response: GetTripResponse };

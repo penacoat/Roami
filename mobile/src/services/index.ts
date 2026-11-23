@@ -15,7 +15,13 @@ import {
   updateStopTime,
   updateStopDetails,
 } from './RevisionService';
-import { listSavedPlaces, removeSavedPlace, savePlace, updateSavedNote } from './SaveService';
+import {
+  listSavedPlaces,
+  removeSavedPlace,
+  restoreSavedPlace,
+  savePlace,
+  updateSavedNote,
+} from './SaveService';
 import { searchRecommendations } from './SearchService';
 import {
   addCandidate,
@@ -46,6 +52,7 @@ export function registerServices(): void {
     listSavedPlaces,
     updateSavedNote,
     removeSavedPlace,
+    restoreSavedPlace,
     createTrip,
     listTrips,
     getTrip,

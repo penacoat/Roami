@@ -167,3 +167,45 @@ it('keeps the draft and shows an error when saving a note fails', async () => {
   await screen.findByText('Try again later');
   expect(screen.queryByText('Could not save your note. Please try again.')).toBeNull();
 });
+
+it('undoes an unsave and brings back the note and recommendation sources', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz', recommendationId: 'r1' });
+  await api.callApi('updateSavedNote', { placeId: 'p-jazz', personalNote: 'Book ahead' });
+  const before = (await api.callApi('listSavedPlaces', {})).saved[0]!;
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Unsave Jazz Alley' }));
+  await screen.findByText('Jazz Alley removed.');
+  expect((await api.callApi('listSavedPlaces', {})).saved).toHaveLength(0);
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Undo removing Jazz Alley' }));
+  await screen.findByRole('button', { name: 'Open saved place: Jazz Alley' });
+  expect(screen.getByText('Book ahead')).toBeTruthy();
+  expect(screen.queryByText('Jazz Alley removed.')).toBeNull();
+  const after = (await api.callApi('listSavedPlaces', {})).saved[0]!;
+  expect(after.personalNote).toBe('Book ahead');
+  expect(after.createdAt).toBe(before.createdAt);
+  expect(after.recommendations.map((r) => r.id)).toEqual(before.recommendations.map((r) => r.id));
+});
+
+it('keeps Undo available when restoring fails, and works on retry', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Unsave Jazz Alley' }));
+  await screen.findByText('Jazz Alley removed.');
+  jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Undo removing Jazz Alley' }));
+  await screen.findByText('Could not undo. Please try again.');
+  await fireEvent.press(screen.getByRole('button', { name: 'Undo removing Jazz Alley' }));
+  await screen.findByRole('button', { name: 'Open saved place: Jazz Alley' });
+});
+
+it('drops the Undo prompt when another place is unsaved', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await api.callApi('savePlace', { placeId: 'p-pike' });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Unsave Jazz Alley' }));
+  await screen.findByText('Jazz Alley removed.');
+  await fireEvent.press(screen.getByRole('button', { name: 'Unsave Pike Place Market' }));
+  await screen.findByText('Pike Place Market removed.');
+  expect(screen.queryByText('Jazz Alley removed.')).toBeNull();
+});
