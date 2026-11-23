@@ -6,30 +6,44 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
 import { callApi } from '../../api';
+import { useCity, nearCity } from '../../cities/CityProvider';
+import { CitySelector } from '../../cities/CitySelector';
 import { buttonOutline } from '../buttonStyles';
 import { PostcardRecommendation } from './postcardRecommendation';
+import { PageSignature } from '../../design/PageSignature';
+import { palette, type } from '../../design/tokens';
 
 export function RecommendationsScreen({
   onOpenPlace,
 }: {
   onOpenPlace: (placeId: string, recommendationId: string) => void;
 }) {
-  const [recommendations, setRecommendations] = useState<RecommendationView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { city, setCity } = useCity();
+  const [items, setRecommendations] = useState<RecommendationView[]>([]);
+  const [itemsCity, setItemsCity] = useState('');
+  const recommendations = itemsCity === city.id ? items : [];
+  const [loadedKey, setLoadedKey] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
 
+  const loadKey = `${city.id}:${refresh}`;
+  const loading = loadedKey !== loadKey;
+
   useEffect(() => {
     let active = true;
-    callApi('getFeed', { city: 'Seattle' })
+    callApi('getFeed', { city: city.name })
       .then(({ items }) => {
         if (active) {
-          setRecommendations(items.filter((item) => item.status === 'available'));
+          setRecommendations(
+            items.filter((item) => item.status === 'available' && nearCity(item.place, city)),
+          );
+          setItemsCity(city.id);
           setError('');
         }
       })
@@ -38,14 +52,14 @@ export function RecommendationsScreen({
       })
       .finally(() => {
         if (active) {
-          setLoading(false);
+          setLoadedKey(loadKey);
           setRefreshing(false);
         }
       });
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, [loadKey, city]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -65,27 +79,32 @@ export function RecommendationsScreen({
           />
         }
       >
-        <Text style={styles.city}>Seattle</Text>
-        <Pressable
-          accessibilityRole="button"
-          disabled={loading || refreshing}
-          onPress={() => {
-            setLoading(true);
-            setError('');
-            setRefresh((value) => value + 1);
-          }}
-          style={styles.refresh}
-        >
-          <Text style={styles.action}>{error ? 'Retry postcards' : 'Refresh postcards'}</Text>
-        </Pressable>
-        {loading ? (
-          <ActivityIndicator accessibilityLabel="Loading postcards" color="#283A70" />
-        ) : error ? (
+        <PageSignature title="Postcards" />
+        <View style={styles.city}>
+          <CitySelector city={city} onSelect={setCity} />
+        </View>
+        {error !== '' && (
+          <Pressable
+            accessibilityRole="button"
+            disabled={loading || refreshing}
+            onPress={() => {
+              setError('');
+              setRefresh((value) => value + 1);
+            }}
+            style={styles.refresh}
+          >
+            <Text style={styles.action}>Retry postcards</Text>
+          </Pressable>
+        )}
+        {!!error && (
           <Text accessibilityRole="alert" style={styles.notice}>
             {error}
           </Text>
+        )}
+        {loading && !refreshing ? (
+          <ActivityIndicator accessibilityLabel="Loading postcards" color="#283A70" />
         ) : recommendations.length === 0 ? (
-          <Text style={styles.notice}>No postcards for Seattle yet.</Text>
+          !error && <Text style={styles.notice}>No postcards for {city.name} yet.</Text>
         ) : (
           recommendations.map((rec) => (
             <PostcardRecommendation key={rec.id} recommendation={rec} onOpenPlace={onOpenPlace} />
@@ -99,13 +118,13 @@ export function RecommendationsScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F3EEE2',
+    backgroundColor: palette.paper,
   },
   content: {
-    padding: 16,
+    padding: 20,
   },
-  city: { color: '#505A72', fontSize: 14, marginBottom: 16 },
-  notice: { color: '#505A72', fontSize: 13, lineHeight: 20 },
+  city: { marginBottom: 12 },
+  notice: { ...type.body, color: palette.muted },
   refresh: {
     ...buttonOutline,
     minHeight: 44,
@@ -114,5 +133,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-start',
   },
-  action: { color: '#283A70', fontSize: 14, fontWeight: '600' },
+  action: { ...type.action, color: palette.primary },
 });

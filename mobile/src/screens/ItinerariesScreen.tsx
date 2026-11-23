@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { callApi } from '../api';
 import { formatDate } from '../trips/tripDraft';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
+import { PageSignature } from '../design/PageSignature';
 
 export function ItinerariesScreen({
   refreshKey,
@@ -62,6 +63,7 @@ export function ItinerariesScreen({
           />
         }
       >
+        <PageSignature title="Itineraries" />
         <Pressable
           accessibilityRole="button"
           onPress={onCreate}
@@ -69,9 +71,7 @@ export function ItinerariesScreen({
         >
           <Text style={styles.primaryText}>New itinerary</Text>
         </Pressable>
-        {loading && !refreshing ? (
-          <ActivityIndicator accessibilityLabel="Loading itineraries" />
-        ) : error ? (
+        {!!error && (
           <>
             <Text accessibilityRole="alert" style={styles.error}>
               {error}
@@ -84,8 +84,11 @@ export function ItinerariesScreen({
               <Text style={styles.buttonText}>Retry</Text>
             </Pressable>
           </>
+        )}
+        {loading && !refreshing ? (
+          <ActivityIndicator accessibilityLabel="Loading itineraries" />
         ) : trips.length === 0 ? (
-          <Text style={styles.text}>No itineraries yet.</Text>
+          !error && <Text style={styles.text}>No itineraries yet.</Text>
         ) : (
           trips.map((trip) => (
             <Pressable

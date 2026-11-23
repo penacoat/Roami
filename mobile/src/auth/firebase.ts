@@ -2,6 +2,7 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   connectAuthEmulator,
   initializeAuth,
+  inMemoryPersistence,
   getReactNativePersistence,
   type Auth,
 } from 'firebase/auth';
@@ -24,10 +25,13 @@ export function getFirebaseApp() {
 let auth: Auth | undefined;
 export function getFirebaseAuth(): Auth {
   if (!auth) {
-    auth = initializeAuth(getFirebaseApp(), {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
     const emulatorHost = process.env.EXPO_PUBLIC_EMULATOR_HOST;
+    auth = initializeAuth(getFirebaseApp(), {
+      // Emulator restarts invalidate saved tokens. Each local test launch gets a
+      // fresh sign-in; real accounts retain their normal persistent session.
+      persistence:
+        __DEV__ && emulatorHost ? inMemoryPersistence : getReactNativePersistence(AsyncStorage),
+    });
     if (emulatorHost) {
       connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
     }

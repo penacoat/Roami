@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { ApiError } from '../src/api';
 import {
+  removeSavedRecommendation,
   listSavedPlaces,
   removeSavedPlace,
   savePlace,
@@ -170,5 +171,24 @@ describe('removeSavedPlace', () => {
     await expect(removeSavedPlace({ placeId: 'p-sam' })).resolves.toEqual({ removed: true });
     expect(fake.all('savedPlaces')).toEqual([]);
     await expect(removeSavedPlace({ placeId: 'p-sam' })).resolves.toEqual({ removed: true });
+  });
+});
+
+it('unbookmarks one recommendation while retaining the place, other recommendation and private note', async () => {
+  await savePlace({ placeId: 'p-sam', recommendationId: 'r5' });
+  await savePlace({ placeId: 'p-sam', recommendationId: 'r7' });
+  await updateSavedNote({ placeId: 'p-sam', personalNote: 'My private plan' });
+  const { saved } = await removeSavedRecommendation({ placeId: 'p-sam', recommendationId: 'r5' });
+  expect(saved.place.id).toBe('p-sam');
+  expect(saved.recommendations.map((item) => item.id)).toEqual(['r7']);
+  expect(saved.personalNote).toBe('My private plan');
+  fake.uid = 'bob';
+  await rejectsWith(
+    removeSavedRecommendation({ placeId: 'p-sam', recommendationId: 'r7' }),
+    'not-found',
+  );
+  expect(fake.get('savedPlaces/alice_p-sam')).toMatchObject({
+    recommendationIds: ['r7'],
+    personalNote: 'My private plan',
   });
 });

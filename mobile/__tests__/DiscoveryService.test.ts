@@ -83,6 +83,25 @@ describe('getPlace', () => {
     expect(place.openingHours).toBeNull();
     expect(place.missingFields).toEqual(['openingHours']);
   });
+  it('carries the website hours and checked date through the shared place API', async () => {
+    const source = {
+      url: 'https://www.seattleartmuseum.org/visit/seattle-art-museum',
+      checkedAt: '2026-11-22',
+    };
+    fake.seed('places/p-sourced', {
+      id: 'p-sourced',
+      name: 'Museum',
+      latitude: 47.6,
+      longitude: -122.3,
+      category: 'museum',
+      openingHours: 'Wed 10 am–5 pm',
+      openingHoursSource: source,
+      missingFields: [],
+    });
+    const { place } = await getPlace({ placeId: 'p-sourced' });
+    expect(place.openingHoursSource).toEqual(source);
+    expect(place.openingHours).toBe('Wed 10 am–5 pm');
+  });
   it('labels an author with no profile instead of failing', async () => {
     const { recommendations } = await getPlace({ placeId: 'p-park' });
     expect(recommendations.map((r) => [r.id, r.author?.name])).toEqual([

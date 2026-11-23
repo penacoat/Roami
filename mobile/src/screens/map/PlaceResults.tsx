@@ -87,7 +87,7 @@ export function PlaceResults({
   const emptyMessage = searching
     ? 'Searching recommendations…'
     : places.length === 0
-      ? `No places in the catalog for ${city}. Change city or refresh.`
+      ? `No Roami places in ${city} yet. You can still explore the map.`
       : savedOnly
         ? 'No saved places match these filters.'
         : 'No places match. Clear the search or change a category.';
@@ -95,7 +95,7 @@ export function PlaceResults({
   return (
     <FlatList
       testID="explore-places-list"
-      data={initialLoading || error ? NO_PLACES : visible}
+      data={initialLoading ? NO_PLACES : visible}
       refreshing={refreshing}
       onRefresh={pullToRefresh}
       alwaysBounceVertical
@@ -126,7 +126,6 @@ export function PlaceResults({
             {query !== '' && (
               <Action text="×" label="Clear search" onPress={update(() => setQuery(''))} />
             )}
-            <Action text="↻" label="Refresh places and saves" onPress={update(refreshPlaces)} />
           </View>
           <ScrollView
             horizontal
@@ -139,7 +138,6 @@ export function PlaceResults({
               selected={savedOnly}
               onPress={update(() => {
                 setSavedOnly(!savedOnly);
-                refreshPlaces();
                 onExpand();
               })}
             />

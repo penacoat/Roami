@@ -35,6 +35,12 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Roami to find your city when you choose your current location."
+        }
       ]
     ],
     "scheme": "roami"

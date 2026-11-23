@@ -15,29 +15,29 @@ export type CommentId = string;
 export type ReportId = string;
 
 export const COLLECTIONS = {
-  users: 'users',
-  places: 'places',
-  recommendations: 'recommendations',
-  savedPlaces: 'savedPlaces',
-  trips: 'trips',
-  tripStops: 'tripStops',
-  tripShares: 'tripShares',
-  rankings: 'rankings',
-  follows: 'follows',
-  likes: 'likes',
-  collections: 'collections',
-  comments: 'comments',
-  preparationTasks: 'preparationTasks',
-  visits: 'visits',
-  reports: 'reports',
-  blocks: 'blocks',
+  users: "users",
+  places: "places",
+  recommendations: "recommendations",
+  savedPlaces: "savedPlaces",
+  trips: "trips",
+  tripStops: "tripStops",
+  tripShares: "tripShares",
+  rankings: "rankings",
+  follows: "follows",
+  likes: "likes",
+  collections: "collections",
+  comments: "comments",
+  preparationTasks: "preparationTasks",
+  visits: "visits",
+  reports: "reports",
+  blocks: "blocks",
 } as const;
 
-export type ModerationStatus = 'active' | 'hidden' | 'removed';
+export type ModerationStatus = "active" | "hidden" | "removed";
 
 /** Where a piece of data came from, so missing info can be labeled. */
 export interface DataSource {
-  provider: 'osm' | 'manual';
+  provider: "osm" | "manual";
   providerId: string | null; // e.g. the OpenStreetMap ID, used to avoid duplicate imports
   retrievedAt: string;
 }
@@ -51,6 +51,12 @@ export interface User {
   createdAt: string;
 }
 
+export interface PlacePhoto {
+  url: string;
+  attribution?: string;
+  illustrative?: boolean;
+}
+
 // 9. Place data (catalog)
 export interface Place {
   id: PlaceId;
@@ -60,6 +66,11 @@ export interface Place {
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not "closed"
+  openingHoursSource?: { url: string; checkedAt: string }; // reviewed source URL and YYYY-MM-DD snapshot date
+  photos?: PlacePhoto[];
+  address?: string | null;
+  website?: string | null;
+  ticketUrl?: string | null;
   cost?: KnownCost;
   missingFields: string[]; // e.g. ["openingHours"]
   source: DataSource;
@@ -109,7 +120,7 @@ export interface Like {
 export interface Comment {
   id: CommentId;
   authorId: UserId;
-  targetType: 'recommendation' | 'place';
+  targetType: "recommendation" | "place";
   targetId: string;
   text: string;
   parentCommentId: CommentId | null;
@@ -184,7 +195,7 @@ export interface PreparationTask {
   deadline: string | null;
   needsReview: boolean; // set when the stop changes
   completed?: boolean;
-  reviewedSchedule?: Pick<TripStop, 'day' | 'startTime' | 'visitMinutes'>;
+  reviewedSchedule?: Pick<TripStop, "day" | "startTime" | "visitMinutes">;
 }
 
 // 6. Visits and rankings
@@ -204,12 +215,12 @@ export interface Ranking {
 }
 
 // 7. Safety and moderation
-export type ReportStatus = 'open' | 'reviewed' | 'actioned' | 'dismissed';
+export type ReportStatus = "open" | "reviewed" | "actioned" | "dismissed";
 
 export interface Report {
   id: ReportId;
   reporterId: UserId;
-  contentType: 'recommendation' | 'comment' | 'user';
+  contentType: "recommendation" | "comment" | "user";
   contentId: string;
   reason: string;
   status: ReportStatus;

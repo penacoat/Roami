@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type ScrollViewInstance,
 } from 'react-native';
@@ -18,6 +17,9 @@ import { StatusBar } from 'expo-status-bar';
 
 import type { Trip } from '@roami/shared';
 import { ApiError, callApi } from '../api';
+import { CitySelector } from '../cities/CitySelector';
+import { useCity } from '../cities/CityProvider';
+import { PageSignature } from '../design/PageSignature';
 import { buttonOutline } from '../components/buttonStyles';
 import { minutesOfDay } from '../logic/trips';
 import { timeFromMinutes, formatTime } from '../trips/stopTime';
@@ -33,20 +35,19 @@ const initialDraft: TripDraft = {
   dayStart: '09:00',
   dayEnd: '21:00',
 };
-const destinations = ['Seattle', 'Portland', 'San Francisco'];
 
 interface Props {
-  onSignOut: () => Promise<void>;
   onCreated?: (tripId: string) => void;
   onBack?: () => void;
 }
 
-export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
+export function TripCreationScreen({ onCreated, onBack }: Props) {
+  const { city } = useCity();
+  const [destination, setDestination] = useState(city);
   const [draft, setDraft] = useState<TripDraft>(initialDraft);
   const [createdTrip, setCreatedTrip] = useState<Trip | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const busy = useRef(false);
   const scroll = useRef<ScrollViewInstance>(null);
   const days = draft.startDate && draft.endDate ? tripDays(draft.startDate, draft.endDate) : 0;
@@ -89,21 +90,6 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
     }
   }
 
-  async function handleSignOut() {
-    if (busy.current) return;
-    busy.current = true;
-    setSigningOut(true);
-    setError('');
-    try {
-      await onSignOut();
-    } catch {
-      setError('Couldn’t sign out. Please try again.');
-    } finally {
-      busy.current = false;
-      setSigningOut(false);
-    }
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
@@ -116,7 +102,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
             <Pressable
               accessibilityRole="button"
               onPress={onBack}
-              disabled={saving || signingOut}
+              disabled={saving}
               style={styles.signOut}
             >
               <Text style={styles.signOutText}>← Itineraries</Text>
@@ -130,14 +116,6 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
               <Text style={styles.brand}>ROAMI</Text>
             </View>
           )}
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleSignOut}
-            disabled={saving || signingOut}
-            style={styles.signOut}
-          >
-            <Text style={styles.signOutText}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
-          </Pressable>
         </View>
         <ScrollView
           ref={scroll}
@@ -145,6 +123,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
+          <PageSignature title="Plan" />
           {createdTrip ? (
             <View style={styles.success}>
               <View style={styles.successIcon}>
@@ -191,7 +170,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
               <Pressable
                 accessibilityRole="button"
                 style={styles.primary}
-                disabled={signingOut}
+                disabled={saving}
                 onPress={() => {
                   setCreatedTrip(null);
                   setDraft(initialDraft);
@@ -219,38 +198,19 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
                 <Text accessibilityRole="header" style={styles.cardTitle}>
                   Where are you headed?
                 </Text>
-                <Text style={styles.label}>City or destination</Text>
-                <TextInput
-                  accessibilityLabel="City or destination"
-                  style={styles.input}
-                  placeholder="City name"
-                  placeholderTextColor={theme.muted}
-                  value={draft.city}
-                  onChangeText={(city) => update({ city })}
-                  autoCapitalize="words"
-                  maxLength={100}
-                  returnKeyType="done"
-                  editable={!saving && !signingOut}
-                />
-                <View style={styles.chips}>
-                  {destinations.map((city) => (
-                    <Pressable
-                      key={city}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: draft.city === city }}
-                      disabled={saving || signingOut}
-                      onPress={() => update({ city })}
-                      style={[styles.chip, draft.city === city && styles.activeChip]}
-                    >
-                      <Text style={[styles.chipText, draft.city === city && styles.activeChipText]}>
-                        {city}
-                      </Text>
-                    </Pressable>
-                  ))}
+                <View pointerEvents={saving ? 'none' : 'auto'}>
+                  <CitySelector
+                    city={destination}
+                    placeholder={draft.city ? undefined : 'Choose city'}
+                    onSelect={(next) => {
+                      setDestination(next);
+                      update({ city: next.name });
+                    }}
+                  />
                 </View>
               </View>
 
-              <View style={styles.card} pointerEvents={saving || signingOut ? 'none' : 'auto'}>
+              <View style={styles.card} pointerEvents={saving ? 'none' : 'auto'}>
                 <Text style={styles.sectionNumber}>02 · THE DATES</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
                   Travel dates
@@ -286,7 +246,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
                   planning
                   start={minutesOfDay(draft.dayStart)}
                   end={minutesOfDay(draft.dayEnd)}
-                  disabled={saving || signingOut}
+                  disabled={saving}
                   onChange={(start, end) =>
                     update({ dayStart: timeFromMinutes(start), dayEnd: timeFromMinutes(end) })
                   }
@@ -310,13 +270,10 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
             ) : null}
             <Pressable
               accessibilityRole="button"
-              disabled={saving || signingOut}
-              accessibilityState={{ disabled: saving || signingOut, busy: saving }}
+              disabled={saving}
+              accessibilityState={{ disabled: saving, busy: saving }}
               onPress={createTrip}
-              style={({ pressed }) => [
-                styles.primary,
-                (pressed || saving || signingOut) && styles.pressed,
-              ]}
+              style={({ pressed }) => [styles.primary, (pressed || saving) && styles.pressed]}
             >
               {saving ? (
                 <ActivityIndicator color="#FFFFFF" />

@@ -37,6 +37,7 @@ it('pulls new itineraries from an empty list and can retry a failed pull', async
     screen.getByTestId('itineraries-list').props.refreshControl.props.onRefresh(),
   );
   await screen.findByText('Could not load itineraries. Try again.');
+  expect(screen.getByLabelText('Open itinerary: Seattle, Nov 23, 2026')).toBeTruthy();
   expect(screen.getByTestId('itineraries-list').props.refreshControl.props.refreshing).toBe(false);
   await act(async () =>
     screen.getByTestId('itineraries-list').props.refreshControl.props.onRefresh(),

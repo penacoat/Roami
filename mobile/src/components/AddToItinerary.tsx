@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { ApiError, callApi } from '../api';
+import { placeActionStyles } from './placeActionStyles';
+import { ActionIcon } from '../design/ActionIcon';
 import { DEFAULT_VISIT_MINUTES, MAX_STOPS_PER_DAY } from '../logic/trips';
 import { tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
@@ -24,11 +26,13 @@ import { TimeRangePicker } from '../trips/TimeRangePicker';
 export function AddToItinerary({
   place,
   recommendationIds = [],
+  compact = false,
   target,
   onChanged,
 }: {
   place: PlaceSummary;
   recommendationIds?: string[];
+  compact?: boolean;
   target?: { tripId: string; day: number };
   onChanged?: (trip: TripView) => void;
 }) {
@@ -154,7 +158,7 @@ export function AddToItinerary({
         accessibilityLabel={
           target ? `Plan ${place.name} for Day ${target.day}` : `Add ${place.name} to an itinerary`
         }
-        style={styles.button}
+        style={compact ? placeActionStyles.button : styles.button}
         onPress={() => {
           setLoading(true);
           setSelected(null);
@@ -169,7 +173,12 @@ export function AddToItinerary({
           setOpen(true);
         }}
       >
-        <Text style={styles.buttonText}>{target ? place.name : 'Add to itinerary'}</Text>
+        <View style={placeActionStyles.label}>
+          {!target && <ActionIcon name="plus" />}
+          <Text style={compact ? placeActionStyles.text : styles.buttonText}>
+            {target ? place.name : compact ? 'Itinerary' : 'Add to itinerary'}
+          </Text>
+        </View>
       </Pressable>
       <Modal
         visible={open}

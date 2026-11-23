@@ -26,6 +26,7 @@ import { MAX_STOPS_PER_DAY } from '../logic/trips';
 import { dateKey, tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
+import { PageSignature } from '../design/PageSignature';
 import {
   DEFAULT_END,
   DEFAULT_START,
@@ -348,6 +349,7 @@ export function ItineraryScreen({
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        <PageSignature title="Itinerary" />
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.button}>
           <Text style={styles.buttonText}>← Itineraries</Text>
         </Pressable>

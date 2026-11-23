@@ -18,6 +18,7 @@ import type {
   TripView,
 } from '@roami/shared';
 
+import { searchCities } from '../cities/citySearch';
 import { ME, OTHER_USERS, PLACES, RECOMMENDATIONS } from './fixtureData';
 import { ApiError, type ApiHandlers } from './types';
 import { journalView, validateRanking } from '../logic/journal';
@@ -218,6 +219,7 @@ const discoveryHandlers: Pick<
   | 'listSavedPlaces'
   | 'updateSavedNote'
   | 'removeSavedPlace'
+  | 'removeSavedRecommendation'
 > = {
   async ensureProfile(request) {
     await delay();
@@ -325,6 +327,15 @@ const discoveryHandlers: Pick<
     return clone({ saved: savedView(record) });
   },
 
+  async removeSavedRecommendation(request) {
+    await delay();
+    const record = saved.get(request.placeId);
+    if (!record) throw new ApiError('not-found', 'That place is not saved.');
+    record.recommendationIds = record.recommendationIds.filter(
+      (id) => id !== request.recommendationId,
+    );
+    return clone({ saved: savedView(record) });
+  },
   async removeSavedPlace(request) {
     await delay();
     saved.delete(request.placeId);
@@ -653,6 +664,8 @@ const personalHandlers: Pick<
 };
 
 export const fixtureHandlers: ApiHandlers = {
+  // City geography stays real in preview; sample places remain separate.
+  searchCities,
   ...discoveryHandlers,
   ...tripHandlers,
   ...personalHandlers,

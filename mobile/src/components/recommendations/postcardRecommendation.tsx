@@ -39,6 +39,8 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
   const [showBack, setShowBack] = useState(false);
 
   const name = recommendation.author?.name ?? 'A fellow traveler';
+  const city = recommendation.place.city ?? '';
+  const stamp = city ? city.slice(0, 3).toUpperCase() : '—';
   const date = formatDate(recommendation.visitDate ?? recommendation.createdAt);
   const photo = PLACE_PHOTOS[recommendation.place.id];
   const sample = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
@@ -60,7 +62,10 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
           </Text>
         </View>
         <View style={styles.smallStamp}>
-          <Text style={styles.smallStampText}>SEA{'\n'}WA</Text>
+          <Text style={styles.smallStampText}>
+            {stamp}
+            {city === 'Seattle' ? '\nWA' : ''}
+          </Text>
         </View>
       </View>
 
@@ -90,11 +95,11 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
             <View style={styles.backDivider} />
             <View style={styles.backRight}>
               <View style={styles.stamp}>
-                <Text style={styles.stampText}>SEA</Text>
+                <Text style={styles.stampText}>{stamp}</Text>
               </View>
               <View>
                 <Text style={styles.addressName}>{recommendation.place.name}</Text>
-                <Text style={styles.address}>Seattle</Text>
+                <Text style={styles.address}>{city || 'Location not provided'}</Text>
               </View>
             </View>
           </View>

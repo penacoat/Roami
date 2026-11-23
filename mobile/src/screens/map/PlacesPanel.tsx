@@ -3,6 +3,7 @@ import {
   Animated,
   Keyboard,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +18,8 @@ interface Props {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   title: string;
+  onBack?: () => void;
+  citySelector?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -26,6 +29,8 @@ export function PlacesPanel({
   expanded,
   onExpandedChange,
   title,
+  onBack,
+  citySelector,
   children,
 }: Props) {
   const { fontScale } = useWindowDimensions();
@@ -42,7 +47,7 @@ export function PlacesPanel({
       Animated.timing(offset, {
         toValue: isExpanded ? 0 : travel,
         duration: 180,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         isInteraction: false,
       }).start();
     },
@@ -84,23 +89,38 @@ export function PlacesPanel({
         {...pan.panHandlers}
         onLayout={({ nativeEvent }) => setHandleHeight(nativeEvent.layout.height)}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={expanded ? 'Collapse places panel' : 'Expand places panel'}
-          accessibilityHint="Swipe the handle or double-tap to switch between the map and the list."
-          accessibilityState={{ expanded }}
-          onPress={() => {
-            Keyboard.dismiss();
-            settle(!expanded);
-          }}
-          style={styles.handle}
-        >
-          <View style={styles.grip} />
+        <View style={styles.handle}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Collapse places panel' : 'Expand places panel'}
+            accessibilityHint="Swipe the handle or double-tap to switch between the map and the list."
+            accessibilityState={{ expanded }}
+            onPress={() => {
+              Keyboard.dismiss();
+              settle(!expanded);
+            }}
+            style={styles.gripTouch}
+          >
+            <View style={styles.grip} />
+          </Pressable>
           <View style={styles.heading}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.action}>{expanded ? 'Show map ↓' : 'Show list ↑'}</Text>
+            {onBack ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close place details"
+                onPress={onBack}
+                style={styles.touch}
+              >
+                <Text style={styles.title}>← Back to places</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.placeSummary}>
+                {citySelector}
+                <Text style={styles.count}>{title}</Text>
+              </View>
+            )}
           </View>
-        </Pressable>
+        </View>
       </View>
       <View
         style={[
@@ -136,7 +156,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     gap: 8,
   },
+  gripTouch: { minHeight: 28, width: '100%', justifyContent: 'center', alignItems: 'center' },
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border },
+  touch: { minHeight: 44, justifyContent: 'center' },
   heading: {
     width: '100%',
     flexDirection: 'row',
@@ -145,7 +167,15 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  placeSummary: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: 10,
+  },
+  count: { color: colors.muted, fontSize: 12 },
   title: { color: colors.ink, fontSize: 14, fontWeight: '600' },
-  action: { color: colors.primary, fontSize: 12, fontWeight: '600' },
   content: { minHeight: 0, overflow: 'hidden' },
 });

@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../screens/map/theme';
 import { buttonOutline } from '../../components/buttonStyles';
+import { fonts } from '../../design/tokens';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 const icons: Record<string, readonly [IconName, IconName]> = {
@@ -12,6 +13,7 @@ const icons: Record<string, readonly [IconName, IconName]> = {
   postcards: ['mail-outline', 'mail'],
   trip: ['map-outline', 'map'],
   saved: ['bookmark-outline', 'bookmark'],
+  profile: ['person-outline', 'person'],
 };
 
 export default function AppTabs() {
@@ -32,7 +34,7 @@ export default function AppTabs() {
           paddingBottom: 4 + insets.bottom,
         },
         tabBarLabelPosition: 'below-icon',
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarLabelStyle: { fontFamily: fonts.body, fontSize: 11, fontWeight: '600' },
         tabBarItemStyle: { ...buttonOutline, borderRadius: 12, marginHorizontal: 4 },
         tabBarIcon: ({ focused }) => (
           <View
@@ -61,6 +63,7 @@ export default function AppTabs() {
       <Tabs.Screen name="postcards" options={{ title: 'Postcards' }} />
       <Tabs.Screen name="trip" options={{ title: 'Itineraries' }} />
       <Tabs.Screen name="saved" options={{ title: 'Saved' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );
 }

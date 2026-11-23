@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { type } from '../design/tokens';
 import { buttonOutline } from '../components/buttonStyles';
 import { tripTheme as theme } from './tripTheme';
 
@@ -8,9 +9,9 @@ export const itineraryStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   title: { color: theme.ink, fontFamily: theme.serif, fontSize: 30, fontWeight: '700' },
-  heading: { color: theme.ink, fontFamily: theme.serif, fontSize: 22, fontWeight: '700' },
-  text: { color: theme.text, fontSize: 15, lineHeight: 22 },
-  muted: { color: theme.muted, fontSize: 13, lineHeight: 20 },
+  heading: { ...type.heading, color: theme.ink, fontWeight: '700' },
+  text: { ...type.body, color: theme.text },
+  muted: { ...type.caption, color: theme.muted },
   error: { color: theme.accent, fontSize: 14, lineHeight: 21 },
   button: {
     ...buttonOutline,
@@ -22,8 +23,8 @@ export const itineraryStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   primary: { backgroundColor: theme.ink, borderColor: theme.ink },
-  buttonText: { color: theme.ink, fontSize: 14, fontWeight: '600' },
-  primaryText: { color: theme.card, fontSize: 14, fontWeight: '600' },
+  buttonText: { ...type.action, color: theme.ink },
+  primaryText: { ...type.action, color: theme.card },
   danger: { backgroundColor: theme.accent, borderColor: theme.accent },
   dangerOutline: { borderColor: theme.accent, alignSelf: 'flex-start' },
   dangerText: { color: theme.accent, fontWeight: '700', fontSize: 14 },

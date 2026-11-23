@@ -4,6 +4,7 @@ import type {
   PlaceSummary,
   Recommendation,
   RecommendationView,
+  RemoveSavedRecommendationRequest,
   RemoveSavedPlaceRequest,
   RemoveSavedPlaceResponse,
   SavedPlace,
@@ -171,4 +172,23 @@ export async function removeSavedPlace(
   const placeId = requirePlaceId(request.placeId);
   await changeSave(userId, placeId, (current) => (current ? 'delete' : null));
   return { removed: true };
+}
+
+/** Unbookmark one recommendation without deleting the place, other sources or private note. */
+export async function removeSavedRecommendation(
+  request: RemoveSavedRecommendationRequest,
+): Promise<SavePlaceResponse> {
+  const userId = requireUserId();
+  const placeId = requirePlaceId(request.placeId);
+  if (typeof request.recommendationId !== 'string' || !request.recommendationId.trim())
+    throw new ApiError('invalid-argument', 'Choose a recommendation.');
+  const saved = await changeSave(userId, placeId, (current) => {
+    if (!current) throw new ApiError('not-found', 'That place is not saved.');
+    return {
+      ...current,
+      recommendationIds: current.recommendationIds.filter((id) => id !== request.recommendationId),
+    };
+  });
+  if (!saved) throw new ApiError('not-found', 'That place is not saved.');
+  return { saved: await toSavedPlaceView(saved) };
 }

@@ -11,7 +11,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: 10,
     flexWrap: 'wrap',
   },

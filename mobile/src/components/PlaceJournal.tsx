@@ -1,12 +1,23 @@
 import type { PlaceJournalResponse, PlaceSummary } from '@roami/shared';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { ApiError, callApi } from '../api';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
 import { dateKey, formatDate } from '../trips/tripDraft';
 import { SharePicker } from './SharePicker';
+import { placeActionStyles } from './placeActionStyles';
+import { palette } from '../design/tokens';
+import { ActionIcon } from '../design/ActionIcon';
 
-export function VisitPlace({ place }: { place: PlaceSummary }) {
+export function VisitPlace({ place, compact = false }: { place: PlaceSummary; compact?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [date, setDate] = useState(() => dateKey(new Date()));
   const [pending, setPending] = useState(false);
@@ -32,49 +43,115 @@ export function VisitPlace({ place }: { place: PlaceSummary }) {
     }
   }
 
-  return (
-    <View style={{ gap: 6 }}>
+  const form = (
+    <>
+      <TextInput
+        accessibilityLabel="Visit date"
+        value={date}
+        maxLength={10}
+        editable={!pending}
+        style={styles.input}
+        placeholder="YYYY-MM-DD"
+        onChangeText={setDate}
+      />
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
         style={styles.button}
         disabled={pending}
-        onPress={() => {
-          setExpanded((value) => !value);
-          setNotice('');
-        }}
+        onPress={() => void mark()}
       >
-        <Text style={styles.buttonText}>{expanded ? 'Cancel visit' : 'Mark visited'}</Text>
+        <Text style={styles.buttonText}>{pending ? 'Saving…' : 'Save visit'}</Text>
       </Pressable>
-      {expanded && (
-        <>
-          <TextInput
-            accessibilityLabel="Visit date"
-            value={date}
-            maxLength={10}
-            editable={!pending}
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            onChangeText={setDate}
-          />
-          <Pressable
-            accessibilityRole="button"
-            style={styles.button}
-            disabled={pending}
-            onPress={() => void mark()}
-          >
-            <Text style={styles.buttonText}>Save visit</Text>
-          </Pressable>
-        </>
-      )}
-      {notice && (
-        <Text accessibilityLiveRegion="polite" style={styles.muted}>
-          {notice}
+    </>
+  );
+  const message = notice ? (
+    <Text accessibilityLiveRegion="polite" style={styles.muted}>
+      {notice}
+    </Text>
+  ) : null;
+  const trigger = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Mark visited"
+      accessibilityState={{ expanded }}
+      style={compact ? [placeActionStyles.button, placeActionStyles.section] : styles.button}
+      disabled={pending}
+      onPress={() => {
+        setExpanded((value) => !value);
+        setNotice('');
+      }}
+    >
+      <View style={placeActionStyles.label}>
+        {(!expanded || compact) && <ActionIcon name="check" />}
+        <Text style={compact ? placeActionStyles.text : styles.buttonText}>
+          {compact ? 'Visited' : expanded ? 'Cancel visit' : 'Mark visited'}
         </Text>
-      )}
+      </View>
+    </Pressable>
+  );
+  if (compact)
+    return (
+      <>
+        {trigger}
+        <Modal
+          visible={expanded || Boolean(notice)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!pending) {
+              setExpanded(false);
+              setNotice('');
+            }
+          }}
+        >
+          <View style={visitStyles.overlay}>
+            <View style={visitStyles.card}>
+              <Text accessibilityRole="header" style={styles.heading}>
+                {place.name}
+              </Text>
+              {expanded && form}
+              {message}
+              <Pressable
+                accessibilityRole="button"
+                style={styles.button}
+                disabled={pending}
+                onPress={() => {
+                  setExpanded(false);
+                  setNotice('');
+                }}
+              >
+                <Text style={styles.buttonText}>{notice && !expanded ? 'Done' : 'Cancel'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </>
+    );
+  return (
+    <View style={{ gap: 6 }}>
+      {trigger}
+      {expanded && form}
+      {message}
     </View>
   );
 }
+const visitStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(16,31,50,0.35)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: palette.paper,
+    borderRadius: 16,
+    padding: 20,
+    gap: 16,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+});
 
 export function PlaceJournal({ refreshKey = 0 }: { refreshKey?: number }) {
   const [journal, setJournal] = useState<PlaceJournalResponse | null>(null);

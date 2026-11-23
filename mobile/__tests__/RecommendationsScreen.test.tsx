@@ -5,6 +5,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as api from '../src/api/ApiClient';
 import { resetFixtures } from '../src/api';
 import { RecommendationsScreen } from '../src/components/recommendations/recommendationsScreen';
+import { CityProvider, useCity } from '../src/cities/CityProvider';
+import { testCities } from '../test-utils/cities';
+import { Pressable } from 'react-native';
 
 jest.mock('react-native-safe-area-context', () => {
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
@@ -48,6 +51,45 @@ it('explains an empty feed without inventing postcards', async () => {
   await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
   await screen.findByText('No postcards for Seattle yet.');
   expect(screen.queryByText('See place ›')).toBeNull();
+});
+
+it('keeps existing postcards after a failed refresh', async () => {
+  await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
+  await screen.findByLabelText('See place: Jazz Alley, recommended by Maya');
+  jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
+  await act(async () =>
+    screen.getByTestId('postcards-list').props.refreshControl.props.onRefresh(),
+  );
+  await screen.findByText('Could not load postcards. Check your connection and try again.');
+  expect(screen.getByLabelText('See place: Jazz Alley, recommended by Maya')).toBeTruthy();
+  expect(screen.getByTestId('postcards-list').props.refreshControl.props.refreshing).toBe(false);
+});
+
+it('never relabels old postcards as a new city after failed loading and retry', async () => {
+  function CitySwitch() {
+    const { setCity } = useCity();
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Switch city"
+        onPress={() => setCity(testCities[1])}
+      />
+    );
+  }
+  await render(
+    <CityProvider>
+      <CitySwitch />
+      <RecommendationsScreen onOpenPlace={jest.fn()} />
+    </CityProvider>,
+  );
+  await screen.findByLabelText('See place: Jazz Alley, recommended by Maya');
+  jest.spyOn(api, 'callApi').mockRejectedValue(new Error('offline'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Switch city' }));
+  await screen.findByText('Could not load postcards. Check your connection and try again.');
+  expect(screen.queryByLabelText('See place: Jazz Alley, recommended by Maya')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Retry postcards' }));
+  await screen.findByText('Could not load postcards. Check your connection and try again.');
+  expect(screen.queryByLabelText('See place: Jazz Alley, recommended by Maya')).toBeNull();
 });
 
 it('keeps postcards during a pull, updates the feed, and finishes a failed refresh', async () => {

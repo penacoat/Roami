@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
-import { signOut } from '../../auth/AuthService';
 import { MapScreen } from '../../screens/MapScreen';
 
 export default function ExploreRoute() {
@@ -19,7 +18,6 @@ export default function ExploreRoute() {
   );
   return (
     <MapScreen
-      onSignOut={signOut}
       savedRefreshKey={savedRefreshKey}
       requestedPlaceId={typeof placeId === 'string' ? placeId : undefined}
       requestedRecommendationId={

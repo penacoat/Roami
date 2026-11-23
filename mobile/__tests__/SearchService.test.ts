@@ -99,6 +99,26 @@ describe('searchRecommendations', () => {
     const { results } = await search('', ['coffee']);
     expect(results.map((r) => r.recommendation.id)).toEqual(['r4']);
   });
+  it('does not return a matcha stop or generic shopping for sunglasses', async () => {
+    seedPlace('p-matcha');
+    seedPlace('p-vintage');
+    seedRec(
+      'r-matcha',
+      'p-matcha',
+      'A matcha-focused dessert break can complement a downtown shopping or sightseeing route.',
+      ['matcha', 'dessert', 'shopping'],
+    );
+    seedRec('r-vintage', 'p-vintage', 'Vintage jackets and furniture.', ['vintage', 'shopping']);
+    await expect(search('sunglasses')).resolves.toEqual({ results: [] });
+
+    seedRec('r-eyewear', 'p-vintage', 'Found vintage eyewear in the back room.', ['clothing']);
+    clearSearchCache();
+    const { results } = await search('sunglasses');
+    expect(results.map((result) => result.recommendation.id)).toEqual(['r-eyewear']);
+    expect(results[0].reasons).toEqual([
+      { kind: 'synonym', term: 'sunglasses', matched: 'eyewear', source: 'text' },
+    ]);
+  });
   it('returns no results for an empty search or no matches', async () => {
     await expect(search('')).resolves.toEqual({ results: [] });
     await expect(search('skydiving')).resolves.toEqual({ results: [] });

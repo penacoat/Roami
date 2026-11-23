@@ -1,21 +1,22 @@
 import type {
   PlaceId,
+  PlacePhoto,
   KnownCost,
   RecommendationId,
   StartingPoint,
   Trip,
   TripStop,
   UserId,
-} from './models';
+} from "./models";
 
 /** How a search term matched. 'broader' means related, not exact (e.g. "live music" for "jazz"). */
-export type MatchKind = 'exact' | 'synonym' | 'prefix' | 'broader';
+export type MatchKind = "exact" | "synonym" | "prefix" | "broader";
 
 export interface MatchReason {
   kind: MatchKind;
   term: string; // what the user searched for
   matched: string; // the tag or text that matched
-  source: 'tag' | 'text';
+  source: "tag" | "text";
 }
 
 /** Public profile. Never contains email or other private data. */
@@ -31,6 +32,15 @@ export interface AuthorSummary {
   name: string;
 }
 
+export interface CityLocation {
+  id: string;
+  name: string;
+  region: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface PlaceSummary {
   id: PlaceId;
   name: string;
@@ -39,6 +49,11 @@ export interface PlaceSummary {
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not closed
+  openingHoursSource?: { url: string; checkedAt: string }; // reviewed source URL and YYYY-MM-DD snapshot date
+  photos?: PlacePhoto[];
+  address?: string | null;
+  website?: string | null;
+  ticketUrl?: string | null;
   cost?: KnownCost;
   missingFields: string[];
 }
@@ -50,7 +65,7 @@ export interface PlaceSummary {
  */
 export interface RecommendationView {
   id: RecommendationId;
-  status: 'available' | 'unavailable';
+  status: "available" | "unavailable";
   place: PlaceSummary;
   author: AuthorSummary | null; // null when unavailable
   description: string;
@@ -62,7 +77,7 @@ export interface RecommendationView {
 
 export interface SearchResult {
   recommendation: RecommendationView;
-  matchLevel: 'exact' | 'broader';
+  matchLevel: "exact" | "broader";
   reasons: MatchReason[]; // why it matched, shown in the UI
 }
 

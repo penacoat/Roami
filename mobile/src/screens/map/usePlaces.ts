@@ -1,12 +1,14 @@
-import type { PlaceSummary, SavedPlaceView, SearchResult } from '@roami/shared';
+import type { CityLocation, PlaceSummary, SavedPlaceView, SearchResult } from '@roami/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { callApi } from '../../api';
+import { nearCity } from '../../cities/CityProvider';
 import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
 } from '../../hooks/useSavedPlacesChanges';
 import { categoryName, hasCoordinates } from './mapUtils';
 
+const NO_PLACES: PlaceSummary[] = [];
 const NO_RESULTS: SearchResult[] = [];
 interface SearchState {
   key: string;
@@ -15,11 +17,14 @@ interface SearchState {
 }
 
 /** All Explore data comes through the shared API, independent of the map renderer. */
-export function usePlaces(city: string, savedRefreshKey: number) {
+export function usePlaces(city: string, savedRefreshKey: number, location?: CityLocation) {
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const savedChanges = useSavedPlacesChangeVersion('explore');
-  const [places, setPlaces] = useState<PlaceSummary[]>([]);
+  const [catalog, setPlaces] = useState<PlaceSummary[]>([]);
+  const [catalogCity, setCatalogCity] = useState('');
+  const cityKey = JSON.stringify([city, location?.id]);
+  const places = catalogCity === cityKey ? catalog : NO_PLACES;
   const [savedPlaces, setSavedPlaces] = useState<Map<string, SavedPlaceView>>(new Map());
   const saveInFlight = useRef(false);
   const savedRevision = useRef(0);
@@ -38,10 +43,10 @@ export function usePlaces(city: string, savedRefreshKey: number) {
   const [searchRetry, setSearchRetry] = useState(0);
   const [savedRefreshError, setSavedRefreshError] = useState('');
   const text = query.trim() ? settledQuery.trim() : '';
-  const loadKey = JSON.stringify([city, refresh]);
+  const loadKey = JSON.stringify([city, location?.id, refresh]);
   const loading = loadStatus.key !== loadKey;
   const error = loading ? '' : loadStatus.error;
-  const searchKey = JSON.stringify([city, text, searchRetry]);
+  const searchKey = JSON.stringify([city, location?.id, text, searchRetry]);
   const searching = query.trim() !== text || (text !== '' && search?.key !== searchKey);
   const searchFailed = text !== '' && search?.key === searchKey && search.status === 'error';
   const results =
@@ -58,7 +63,16 @@ export function usePlaces(city: string, savedRefreshKey: number) {
     callApi('listPlaces', { city })
       .then(({ places: catalog }) => {
         if (!active) return;
-        setPlaces(catalog);
+        const next = location
+          ? catalog.filter(
+              (place) =>
+                !Number.isFinite(place.latitude) ||
+                !Number.isFinite(place.longitude) ||
+                nearCity(place, location),
+            )
+          : catalog;
+        setPlaces((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
+        setCatalogCity(cityKey);
         setLoadStatus({ key: loadKey, error: '' });
       })
       .catch(() => {
@@ -74,7 +88,7 @@ export function usePlaces(city: string, savedRefreshKey: number) {
     return () => {
       active = false;
     };
-  }, [city, loadKey]);
+  }, [city, cityKey, loadKey, location]);
 
   // Saved can change on another tab while Explore remains mounted.
   useEffect(() => {
@@ -84,14 +98,17 @@ export function usePlaces(city: string, savedRefreshKey: number) {
       .then(({ saved }) => {
         if (active && revision === savedRevision.current) {
           setSavedRefreshError('');
-          setSavedPlaces(new Map(saved.map((item) => [item.place.id, item])));
+          setSavedPlaces((current) => {
+            const next = new Map(saved.map((item) => [item.place.id, item]));
+            return JSON.stringify([...current]) === JSON.stringify([...next]) ? current : next;
+          });
           setSaveAction((current) =>
             current.pending ? current : { placeId: '', pending: '', notice: '', failed: false },
           );
         }
       })
       .catch(() => {
-        if (active) setSavedRefreshError('Could not refresh Saved. Tap Refresh to try again.');
+        if (active) setSavedRefreshError('Could not refresh Saved. Pull down or retry.');
       });
     return () => {
       active = false;
@@ -150,9 +167,12 @@ export function usePlaces(city: string, savedRefreshKey: number) {
       failed: false,
     });
     try {
-      const entry = remove
-        ? (await callApi('removeSavedPlace', { placeId }), undefined)
-        : (await callApi('savePlace', { placeId, recommendationId })).saved;
+      const entry =
+        remove && recommendationId
+          ? (await callApi('removeSavedRecommendation', { placeId, recommendationId })).saved
+          : remove
+            ? (await callApi('removeSavedPlace', { placeId }), undefined)
+            : (await callApi('savePlace', { placeId, recommendationId })).saved;
       savedRevision.current += 1;
       setSavedPlaces((current) => {
         const next = new Map(current);
@@ -164,20 +184,26 @@ export function usePlaces(city: string, savedRefreshKey: number) {
       setSaveAction({
         placeId,
         pending: '',
-        notice: remove
-          ? 'Removed from Saved. You can save this place again.'
-          : recommendationId
-            ? 'Saved with this recommendation.'
-            : 'Place saved.',
+        notice:
+          remove && recommendationId
+            ? 'Recommendation removed. The place is still saved.'
+            : remove
+              ? 'Removed from Saved. You can save this place again.'
+              : recommendationId
+                ? 'Recommendation saved with this place.'
+                : 'Place saved.',
         failed: false,
       });
     } catch {
       setSaveAction({
         placeId,
         pending: '',
-        notice: remove
-          ? 'Could not unsave. Please try again.'
-          : 'Could not save. Please try again.',
+        notice:
+          remove && recommendationId
+            ? 'Could not remove this recommendation. Please try again.'
+            : remove
+              ? 'Could not unsave. Please try again.'
+              : 'Could not save. Please try again.',
         failed: true,
       });
     } finally {

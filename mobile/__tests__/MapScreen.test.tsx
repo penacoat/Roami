@@ -8,6 +8,13 @@ import { resetFixtures } from '../src/api';
 import { MapScreen } from '../src/screens/MapScreen';
 
 // Keep user interactions real while replacing the native map surface.
+jest.mock('../src/cities/citySearch', () => ({
+  searchCities: async ({ query }: { query: string }) => ({
+    cities: (require('../test-utils/cities').testCities as { name: string }[]).filter(
+      (city) => city.name.toLowerCase() === query.trim().toLowerCase(),
+    ),
+  }),
+}));
 jest.mock('react-native-maps', () => {
   const ReactModule = jest.requireActual<typeof import('react')>('react');
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
@@ -29,7 +36,10 @@ jest.mock('react-native-maps', () => {
 
 jest.mock('react-native-safe-area-context', () => {
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+  };
 });
 
 beforeEach(() => {
@@ -38,18 +48,25 @@ beforeEach(() => {
   resetFixtures();
 });
 
-it('does not leave the previous city map visible when the next city has no catalog data', async () => {
-  await render(<MapScreen onSignOut={async () => undefined} />);
+it('centers the selected city even without catalog places and removes stale pins', async () => {
+  await render(<MapScreen />);
   await screen.findByLabelText('Map pin for Kerry Park');
   await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
   await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
-  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
-  await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
-  expect(screen.queryByTestId('native-place-map')).toBeNull();
-  expect(screen.queryByLabelText('Zoom in')).toBeNull();
+  await fireEvent.press(await screen.findByRole('button', { name: /^Select city: Portland/ }));
+  await screen.findByText('No Roami places in Portland yet. You can still explore the map.');
+  expect(screen.getByTestId('native-place-map')).toBeTruthy();
+  expect(screen.queryByLabelText('Map pin for Kerry Park')).toBeNull();
+  const { mapCalls } = jest.requireMock('react-native-maps') as {
+    mapCalls: { animate: ReturnType<typeof jest.fn> };
+  };
+  expect(mapCalls.animate).toHaveBeenCalledWith(
+    expect.objectContaining({ latitude: 45.52345, longitude: -122.67621 }),
+    450,
+  );
   await fireEvent.press(screen.getByLabelText('Change city: Portland'));
   await fireEvent.changeText(screen.getByLabelText('City name'), 'Seattle');
-  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await fireEvent.press(await screen.findByRole('button', { name: /^Select city: Seattle/ }));
   await screen.findByLabelText('Map pin for Kerry Park');
 });
 
@@ -65,7 +82,6 @@ it('opens the exact postcard recommendation and carries its source into the itin
     const clear = React.useCallback(() => setPlaceId(undefined), []);
     return (
       <MapScreen
-        onSignOut={async () => undefined}
         requestedPlaceId={placeId}
         requestedRecommendationId="r1"
         onPlaceRequestHandled={clear}
@@ -89,7 +105,6 @@ it('clears recommendation emphasis when another map pin is selected', async () =
     const clear = React.useCallback(() => setPlaceId(undefined), []);
     return (
       <MapScreen
-        onSignOut={async () => undefined}
         requestedPlaceId={placeId}
         requestedRecommendationId="r1"
         onPlaceRequestHandled={clear}
@@ -111,11 +126,7 @@ function PlaceRequestHarness() {
       <Pressable accessibilityRole="button" onPress={() => setPlaceId('p-jazz')}>
         <Text>Open postcard place</Text>
       </Pressable>
-      <MapScreen
-        onSignOut={async () => undefined}
-        requestedPlaceId={placeId}
-        onPlaceRequestHandled={clearRequest}
-      />
+      <MapScreen requestedPlaceId={placeId} onPlaceRequestHandled={clearRequest} />
     </>
   );
 }
@@ -147,8 +158,8 @@ it.each([
   } else {
     await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
     await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
-    await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
-    await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
+    await fireEvent.press(await screen.findByRole('button', { name: /^Select city: Portland/ }));
+    await screen.findByText('No Roami places in Portland yet. You can still explore the map.');
   }
   await act(async () => {
     if (outcome === 'success') resolve(target);
@@ -168,13 +179,7 @@ it.each([
 
 it('explains an unavailable postcard target instead of opening an unrelated place', async () => {
   const consumed = jest.fn();
-  await render(
-    <MapScreen
-      onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)}
-      requestedPlaceId="removed-place"
-      onPlaceRequestHandled={consumed}
-    />,
-  );
+  await render(<MapScreen requestedPlaceId="removed-place" onPlaceRequestHandled={consumed} />);
   await screen.findByText('This place is no longer available.');
   expect(screen.queryByLabelText('Close place details')).toBeNull();
   expect(consumed).toHaveBeenCalledTimes(1);
@@ -204,17 +209,10 @@ it('opens an API place outside Seattle by ID and uses its returned city and coor
   function Request() {
     const [placeId, setPlaceId] = React.useState<string | undefined>(place.id);
     const clear = React.useCallback(() => setPlaceId(undefined), []);
-    return (
-      <MapScreen
-        onSignOut={async () => undefined}
-        requestedPlaceId={placeId}
-        onPlaceRequestHandled={clear}
-      />
-    );
+    return <MapScreen requestedPlaceId={placeId} onPlaceRequestHandled={clear} />;
   }
   await render(<Request />);
   await screen.findByRole('header', { name: place.name });
-  await screen.findByLabelText('Change city: Portland');
   await screen.findByLabelText('Map pin for Portland Garden');
   expect(calls).toHaveBeenCalledWith('getPlace', { placeId: place.id });
   expect(calls).toHaveBeenCalledWith('listPlaces', { city: 'Portland' });
@@ -225,6 +223,8 @@ it('opens an API place outside Seattle by ID and uses its returned city and coor
     expect.objectContaining({ latitude: place.latitude, longitude: place.longitude }),
     250,
   );
+  await fireEvent.press(screen.getByRole('button', { name: 'Close place details' }));
+  await screen.findByLabelText('Change city: Portland');
 });
 
 it('keeps the catalog visible when Saved fails to load', async () => {
@@ -234,21 +234,19 @@ it('keeps the catalog visible when Saved fails to load', async () => {
     .mockImplementation((name, request) =>
       name === 'listSavedPlaces' ? Promise.reject(new Error('offline')) : original(name, request),
     );
-  await render(<MapScreen onSignOut={async () => undefined} />);
+  await render(<MapScreen />);
   await screen.findByLabelText('Map pin for Jazz Alley');
-  await screen.findByText('Could not refresh Saved. Tap Refresh to try again.');
+  await screen.findByText('Could not refresh Saved. Pull down or retry.');
   expect(screen.queryByRole('button', { name: 'Retry places' })).toBeNull();
 });
 
 it('opens a map pin, saves its recommendation source, and finds it in Saved', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Map pin for Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Map pin for Jazz Alley'));
   await screen.findByRole('button', { name: 'Save recommendation by Maya' });
   await fireEvent.press(screen.getByRole('button', { name: 'Save recommendation by Maya' }));
-  await screen.findByText('Saved with this recommendation.');
+  await screen.findByText('Recommendation saved with this place.');
   const { saved } = await api.callApi('listSavedPlaces', {});
   expect(saved).toHaveLength(1);
   expect(saved[0].place.id).toBe('p-jazz');
@@ -260,9 +258,7 @@ it('opens a map pin, saves its recommendation source, and finds it in Saved', as
 });
 
 it('filters names and categories and explains an empty result', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Pike Place Market');
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'MUSEUM');
   expect(screen.getByLabelText('Open Seattle Art Museum')).toBeTruthy();
@@ -273,9 +269,7 @@ it('filters names and categories and explains an empty result', async () => {
 
 it('derives category chips from the catalog and combines category, text, and saved filters', async () => {
   await api.callApi('savePlace', { placeId: 'p-sam' });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Filter category: Museum');
   expect(screen.queryByLabelText('Filter category: Shopping')).toBeNull();
   await fireEvent.press(screen.getByLabelText('Filter category: Museum'));
@@ -290,22 +284,18 @@ it('derives category chips from the catalog and combines category, text, and sav
 
 it('queries the requested city and clears places from the previous city', async () => {
   const calls = jest.spyOn(api, 'callApi');
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Pike Place Market');
   await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
   await fireEvent.changeText(screen.getByLabelText('City name'), '  Portland  ');
-  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
-  await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
+  await fireEvent.press(await screen.findByRole('button', { name: /^Select city: Portland/ }));
+  await screen.findByText('No Roami places in Portland yet. You can still explore the map.');
   expect(calls).toHaveBeenCalledWith('listPlaces', { city: 'Portland' });
   expect(screen.queryByLabelText('Map pin for Pike Place Market')).toBeNull();
 });
 
 it('finds a place through recommendation text even when its name and category do not match', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'sunset');
   await waitFor(() => expect(screen.getByLabelText('Open Kerry Park')).toBeTruthy());
@@ -318,9 +308,7 @@ it('labels failed recommendation search honestly and recovers through retry', as
     if (name === 'searchRecommendations' && fail) return Promise.reject(new Error('offline'));
     return original(name, request);
   });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'sunset');
   await screen.findByText(
@@ -348,9 +336,7 @@ it('ignores an old search response after the query changes', async () => {
     }
     return original(name, request);
   });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'jazz');
   await waitFor(() => expect(finish).toBeDefined());
@@ -364,19 +350,18 @@ it('fits catalog coordinates and sends zoom and selected-place updates to the na
   const { mapCalls } = jest.requireMock('react-native-maps') as {
     mapCalls: { animate: ReturnType<typeof jest.fn>; fit: ReturnType<typeof jest.fn> };
   };
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
+  await fireEvent.press(screen.getByRole('button', { name: 'Show all visible places on map' }));
   expect(mapCalls.fit).toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Zoom in' }));
   expect(mapCalls.animate).toHaveBeenLastCalledWith(
-    expect.objectContaining({ latitudeDelta: 0.03 }),
+    expect.objectContaining({ latitudeDelta: 0.06 }),
     200,
   );
   await fireEvent.press(screen.getByRole('button', { name: 'Zoom out' }));
   expect(mapCalls.animate).toHaveBeenLastCalledWith(
-    expect.objectContaining({ latitudeDelta: 0.06 }),
+    expect.objectContaining({ latitudeDelta: 0.12 }),
     200,
   );
   await fireEvent.press(screen.getByLabelText('Map pin for Jazz Alley'));
@@ -388,9 +373,7 @@ it('fits catalog coordinates and sends zoom and selected-place updates to the na
 
 it('treats unknown hours as unknown', async () => {
   jest.spyOn(api, 'getApiMode').mockReturnValue('live');
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.press(screen.getByLabelText('Open Kerry Park'));
   expect(screen.getByText('Hours not provided')).toBeTruthy();
@@ -407,7 +390,7 @@ it('updates hours from the place-details API instead of keeping an older list va
     }
     return original(name, request);
   });
-  await render(<MapScreen onSignOut={async () => undefined} />);
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.press(screen.getByLabelText('Open Kerry Park'));
   await screen.findByText('Reported hours · Monday–Friday 09:00–17:00');
@@ -422,7 +405,7 @@ it('updates hours from the place-details API instead of keeping an older list va
 });
 
 it('pulls fresh places and saved status without clearing the current list while loading', async () => {
-  await render(<MapScreen onSignOut={async () => undefined} />);
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await api.callApi('savePlace', { placeId: 'p-jazz' });
   const original = api.callApi;
@@ -452,27 +435,23 @@ it('pulls fresh places and saved status without clearing the current list while 
 
 it('recovers from a failed place load through Retry', async () => {
   jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByRole('button', { name: 'Retry places' });
   await fireEvent.press(screen.getByRole('button', { name: 'Retry places' }));
   await screen.findByLabelText('Open Pike Place Market');
 });
 
 it('does not claim a failed save succeeded and allows retry', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Pike Place Market');
   await fireEvent.press(screen.getByLabelText('Open Pike Place Market'));
   await screen.findByRole('button', { name: 'Save recommendation by Maya' });
   jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
   await fireEvent.press(screen.getByRole('button', { name: 'Save place' }));
   await screen.findByText('Could not save. Please try again.');
-  expect(screen.queryByText('Saved ✓ · Unsave')).toBeNull();
+  expect(screen.queryByText('Unsave')).toBeNull();
   await fireEvent.press(screen.getByRole('button', { name: 'Save place' }));
-  await screen.findByText('Saved ✓ · Unsave');
+  await screen.findByText('Unsave');
 });
 
 it('opens the exact supplied source URL and reports a failed handoff', async () => {
@@ -483,9 +462,7 @@ it('opens the exact supplied source URL and reports a failed handoff', async () 
     sourceLinks: ['https://www.jazzalley.com/'],
   });
   const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   const link = await screen.findByRole('link', { name: 'Open source: jazzalley.com' });
@@ -497,13 +474,13 @@ it('opens the exact supplied source URL and reports a failed handoff', async () 
 });
 
 it('does not invent a venue link when the catalog supplies none', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   await waitFor(() => expect(screen.queryByLabelText('Loading recommendations')).toBeNull());
-  expect(screen.queryAllByRole('link')).toHaveLength(0);
+  expect(screen.queryByLabelText('Website for Jazz Alley')).toBeNull();
+  expect(screen.queryAllByLabelText(/^Open source:/)).toHaveLength(0);
+  expect(screen.getByLabelText('Directions to Jazz Alley')).toBeTruthy();
 });
 
 it('omits malformed and non-web source URLs', async () => {
@@ -513,13 +490,13 @@ it('omits malformed and non-web source URLs', async () => {
     tags: [],
     sourceLinks: ['https://', 'javascript:alert(1)', 'https://user:password@example.test/'],
   });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   await waitFor(() => expect(screen.queryByLabelText('Loading recommendations')).toBeNull());
-  expect(screen.queryAllByRole('link')).toHaveLength(0);
+  expect(screen.queryByLabelText('Website for Jazz Alley')).toBeNull();
+  expect(screen.queryAllByLabelText(/^Open source:/)).toHaveLength(0);
+  expect(screen.getByLabelText('Directions to Jazz Alley')).toBeTruthy();
 });
 
 it('does not present emulator sample hours or authors as verified venue details', async () => {
@@ -527,15 +504,13 @@ it('does not present emulator sample hours or authors as verified venue details'
   process.env.EXPO_PUBLIC_EMULATOR_HOST = '127.0.0.1';
   jest.spyOn(api, 'getApiMode').mockReturnValue('live');
   try {
-    await render(
-      <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-    );
+    await render(<MapScreen />);
     await screen.findByLabelText('Open Jazz Alley');
     expect(screen.queryByText(/Demo data/)).toBeNull();
     await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
     await screen.findByText('Sample recommendation · Maya');
-    expect(screen.getByText('Hours not verified')).toBeTruthy();
-    expect(screen.queryByText(/18:00-23:00/)).toBeNull();
+    expect(screen.getByText('Sample hours · 18:00-23:00')).toBeTruthy();
+    expect(screen.queryByText(/Reported hours/)).toBeNull();
   } finally {
     if (previous === undefined) delete process.env.EXPO_PUBLIC_EMULATOR_HOST;
     else process.env.EXPO_PUBLIC_EMULATOR_HOST = previous;
@@ -543,9 +518,7 @@ it('does not present emulator sample hours or authors as verified venue details'
 });
 
 it('expands and collapses the places panel without losing the selected place or filters', async () => {
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Map pin for Jazz Alley');
   await fireEvent.press(screen.getByRole('button', { name: 'Expand places panel' }));
   expect(screen.getByRole('button', { name: 'Collapse places panel' })).toBeTruthy();
@@ -562,18 +535,17 @@ it('expands and collapses the places panel without losing the selected place or 
 
 it('unsaves through the service, updates Saved, and allows saving the place again', async () => {
   await api.callApi('savePlace', { placeId: 'p-jazz', recommendationId: 'r1' });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByRole('button', { name: 'Saved · 1' });
   await fireEvent.press(screen.getByRole('button', { name: 'Saved · 1' }));
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
-  await screen.findByText('Place + tip saved ✓');
-  expect(screen.getByRole('button', { name: 'Save recommendation by Maya' })).toBeDisabled();
+  await screen.findByRole('button', { name: 'Unsave recommendation by Maya' });
+  expect(screen.getByRole('button', { name: 'Unsave recommendation by Maya' })).toBeEnabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
   await screen.findByText('Removed from Saved. You can save this place again.');
   expect((await api.callApi('listSavedPlaces', {})).saved).toHaveLength(0);
+  await fireEvent.press(screen.getByRole('tab', { name: 'All postcards' }));
   expect(screen.getByRole('button', { name: 'Save recommendation by Maya' })).toBeEnabled();
   await fireEvent.press(screen.getByLabelText('Close place details'));
   await screen.findByRole('button', { name: 'Saved · 0' });
@@ -583,7 +555,7 @@ it('unsaves through the service, updates Saved, and allows saving the place agai
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   await fireEvent.press(screen.getByRole('button', { name: 'Save place' }));
-  await screen.findByText('Saved ✓ · Unsave');
+  await screen.findByText('Unsave');
   expect((await api.callApi('listSavedPlaces', {})).saved).toHaveLength(1);
 });
 
@@ -595,14 +567,12 @@ it('keeps a failed unsave visibly saved and lets the user retry', async () => {
     if (name === 'removeSavedPlace' && fail) return Promise.reject(new Error('offline'));
     return original(name, request);
   });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
   await screen.findByText('Could not unsave. Please try again.');
-  expect(screen.getByText('Saved ✓ · Unsave')).toBeTruthy();
+  expect(screen.getByText('Unsave')).toBeTruthy();
   expect((await original('listSavedPlaces', {})).saved).toHaveLength(1);
   fail = false;
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
@@ -623,9 +593,7 @@ it('blocks repeated unsave taps even after the detail card is closed and reopene
       });
     return original(name, request);
   });
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
@@ -643,17 +611,98 @@ it('keeps the selected map view steady when saving and unsaving', async () => {
   const { mapCalls } = jest.requireMock('react-native-maps') as {
     mapCalls: { animate: ReturnType<typeof jest.fn>; fit: ReturnType<typeof jest.fn> };
   };
-  await render(
-    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
-  );
+  await render(<MapScreen />);
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
   mapCalls.animate.mockClear();
   mapCalls.fit.mockClear();
   await fireEvent.press(screen.getByRole('button', { name: 'Save place' }));
-  await screen.findByText('Saved ✓ · Unsave');
+  await screen.findByText('Unsave');
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
   await screen.findByText('Removed from Saved. You can save this place again.');
   expect(mapCalls.animate).not.toHaveBeenCalled();
   expect(mapCalls.fit).not.toHaveBeenCalled();
+});
+
+it('toggles a recommendation bookmark without unsaving the venue or its private note', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz', recommendationId: 'r1' });
+  await api.callApi('updateSavedNote', { placeId: 'p-jazz', personalNote: 'My private plan' });
+  await render(<MapScreen />);
+  await fireEvent.press(await screen.findByLabelText('Open Jazz Alley'));
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Unsave recommendation by Maya' }),
+  );
+  await screen.findByText('Recommendation removed. The place is still saved.');
+  expect(screen.getByRole('button', { name: 'Unsave place' })).toBeTruthy();
+  expect(screen.getByText('My private plan')).toBeTruthy();
+  const { saved } = await api.callApi('listSavedPlaces', {});
+  expect(saved[0].recommendations).toEqual([]);
+  expect(saved[0].personalNote).toBe('My private plan');
+  await fireEvent.press(screen.getByRole('tab', { name: 'All postcards' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Save recommendation by Maya' }));
+  await screen.findByRole('button', { name: 'Unsave recommendation by Maya' });
+});
+
+it('renders API business details and opens the supplied website and coordinate directions', async () => {
+  const original = api.callApi;
+  jest.spyOn(api, 'getApiMode').mockReturnValue('live');
+  const calls = jest.spyOn(api, 'callApi').mockImplementation(async (name, request) => {
+    if (name === 'getPlace') {
+      const details = await original('getPlace', request as { placeId: string });
+      return {
+        ...details,
+        place: {
+          ...details.place,
+          address: '2033 6th Avenue',
+          website: 'https://www.jazzalley.com/',
+          ticketUrl: 'https://www.jazzalley.com/www-home/calendar.jsp',
+          openingHours: 'Daily 18:00–23:00',
+        },
+      };
+    }
+    return original(name, request);
+  });
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  await render(<MapScreen />);
+  await fireEvent.press(await screen.findByLabelText('Open Jazz Alley'));
+  await screen.findByText('2033 6th Avenue');
+  await screen.findByText('Reported hours · Daily 18:00–23:00');
+  await fireEvent.press(screen.getByRole('link', { name: 'Website for Jazz Alley' }));
+  expect(open).toHaveBeenLastCalledWith('https://www.jazzalley.com/');
+  await fireEvent.press(screen.getByRole('link', { name: 'Tickets for Jazz Alley' }));
+  expect(open).toHaveBeenLastCalledWith('https://www.jazzalley.com/www-home/calendar.jsp');
+  expect(screen.queryByText('View location ↗')).toBeNull();
+  expect(screen.queryByText('Postcards about this place')).toBeNull();
+  await fireEvent.press(screen.getByRole('link', { name: 'Directions to Jazz Alley' }));
+  expect(open).toHaveBeenLastCalledWith(
+    'https://www.google.com/maps/dir/?api=1&destination=47.6139%2C-122.3417',
+  );
+  expect(calls).toHaveBeenCalledWith('getPlace', { placeId: 'p-jazz' });
+});
+
+it('labels website-sourced hours with the checked date and opens their source even in local testing', async () => {
+  const original = api.callApi;
+  const url = 'https://www.seattleartmuseum.org/visit/seattle-art-museum';
+  jest.spyOn(api, 'callApi').mockImplementation(async (name, request) => {
+    if (name === 'getPlace') {
+      const details = await original('getPlace', request as { placeId: string });
+      return {
+        ...details,
+        place: {
+          ...details.place,
+          openingHours: 'Wed 10 am–5 pm',
+          openingHoursSource: { url, checkedAt: '2026-11-22' },
+        },
+      };
+    }
+    return original(name, request);
+  });
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  await render(<MapScreen />);
+  await fireEvent.press(await screen.findByLabelText('Open Seattle Art Museum'));
+  await screen.findByText('Wed 10 am–5 pm');
+  expect(screen.queryByText(/Sample hours/)).toBeNull();
+  await screen.findByText('Venue hours · checked Nov 22, 2026 ↗');
+  await fireEvent.press(screen.getByRole('link', { name: 'Hours source for Seattle Art Museum' }));
+  expect(open).toHaveBeenLastCalledWith(url);
 });

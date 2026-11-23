@@ -66,7 +66,6 @@ const BROADER: Record<string, string[]> = {
   brunch: ['breakfast', 'bakery'],
   bookstore: ['shopping'],
   vintage: ['shopping'],
-  sunglasses: ['vintage', 'shopping'],
   shopping: ['market', 'vintage', 'bookstore'],
   market: ['food', 'shopping'],
   study: ['coffee', 'quiet'],

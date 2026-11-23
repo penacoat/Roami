@@ -16,32 +16,32 @@ beforeEach(() => {
 
 it('hides the password by default and toggles it with the eye button', async () => {
   await render(<AuthScreen />);
-  expect(screen.getByPlaceholderText('Password').props.secureTextEntry).toBe(true);
+  expect(screen.getByLabelText('Password').props.secureTextEntry).toBe(true);
 
   await fireEvent.press(screen.getByRole('button', { name: 'Show password' }));
-  expect(screen.getByPlaceholderText('Password').props.secureTextEntry).toBe(false);
+  expect(screen.getByLabelText('Password').props.secureTextEntry).toBe(false);
 
   await fireEvent.press(screen.getByRole('button', { name: 'Hide password' }));
-  expect(screen.getByPlaceholderText('Password').props.secureTextEntry).toBe(true);
+  expect(screen.getByLabelText('Password').props.secureTextEntry).toBe(true);
 });
 
 it('keeps what was typed when toggling', async () => {
   await render(<AuthScreen />);
-  await fireEvent.changeText(screen.getByPlaceholderText('Password'), 'hunter22');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'hunter22');
   await fireEvent.press(screen.getByRole('button', { name: 'Show password' }));
-  expect(screen.getByPlaceholderText('Password').props.value).toBe('hunter22');
+  expect(screen.getByLabelText('Password').props.value).toBe('hunter22');
 });
 
 it('hides the password again when switching between sign in and sign up', async () => {
   await render(<AuthScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Show password' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Create an account' }));
-  expect(screen.getByPlaceholderText('Password').props.secureTextEntry).toBe(true);
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
+  expect(screen.getByLabelText('Password').props.secureTextEntry).toBe(true);
 });
 
 it('has no password field or eye button on the reset screen', async () => {
   await render(<AuthScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Forgot password?' }));
-  expect(screen.queryByPlaceholderText('Password')).toBeNull();
+  expect(screen.queryByLabelText('Password')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show password' })).toBeNull();
 });

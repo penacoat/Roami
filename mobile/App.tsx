@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
+import { useFonts } from 'expo-font';
+import { Sacramento_400Regular } from '@expo-google-fonts/sacramento';
+import { CityProvider } from './src/cities/CityProvider';
+import { RoamiLoading } from './src/design/RoamingRibbon';
+import { isFrontendPreview } from './src/config/preview';
 
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { ProfileSetupBanner } from './src/auth/ProfileSetupBanner';
 import { clearProfileSetupFailed, reportProfileSetupFailed } from './src/auth/profileSetup';
 import { callApi, getApiMode } from './src/api';
 
-function Root() {
+function Root({ fontsReady }: { fontsReady: boolean }) {
   const { user, loading } = useAuth();
   const [servicesReady, setServicesReady] = useState(getApiMode() === 'fixtures');
   const [servicesError, setServicesError] = useState(false);
@@ -57,18 +62,15 @@ function Root() {
     );
   }
 
-  if (loading || !servicesReady) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  if (loading || !servicesReady || !fontsReady) return <RoamiLoading />;
 
   return (
     <View style={styles.flex}>
       <ProfileSetupBanner />
       <Stack key={user?.uid ?? 'signed-out'} screenOptions={{ headerShown: false }}>
+        <Stack.Protected guard={__DEV__ && isFrontendPreview}>
+          <Stack.Screen name="design-review" />
+        </Stack.Protected>
         <Stack.Protected guard={Boolean(user)}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="new-trip" />
@@ -83,10 +85,13 @@ function Root() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({ Sacramento_400Regular });
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <Root />
+        <CityProvider>
+          <Root fontsReady={fontsLoaded || Boolean(fontError)} />
+        </CityProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

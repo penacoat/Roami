@@ -28,6 +28,28 @@ function toPlaceSummary(id: string, data: DocumentData): PlaceSummary {
     ...(cost && { cost }),
     // null means unknown, not closed. Never turn a missing value into a default.
     openingHours: typeof data.openingHours === 'string' ? data.openingHours : null,
+    ...(typeof data.openingHoursSource?.url === 'string' &&
+      typeof data.openingHoursSource?.checkedAt === 'string' && {
+        openingHoursSource: {
+          url: data.openingHoursSource.url,
+          checkedAt: data.openingHoursSource.checkedAt,
+        },
+      }),
+    photos: Array.isArray(data.photos)
+      ? data.photos
+          .filter(
+            (photo: unknown) =>
+              photo && typeof photo === 'object' && 'url' in photo && typeof photo.url === 'string',
+          )
+          .map((photo: { url: string; attribution?: string; illustrative?: boolean }) => ({
+            url: photo.url,
+            ...(typeof photo.attribution === 'string' && { attribution: photo.attribution }),
+            ...(photo.illustrative === true && { illustrative: true }),
+          }))
+      : [],
+    address: typeof data.address === 'string' ? data.address.trim() || null : null,
+    website: typeof data.website === 'string' ? data.website.trim() || null : null,
+    ticketUrl: typeof data.ticketUrl === 'string' ? data.ticketUrl.trim() || null : null,
     missingFields: Array.isArray(data.missingFields) ? data.missingFields.map(String) : [],
   };
 }

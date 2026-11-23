@@ -1,5 +1,6 @@
 import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
 import type {
+  CityLocation,
   PlaceSummary,
   PublicUser,
   RecommendationView,
@@ -51,6 +52,13 @@ export interface UpdateProfileResponse {
 }
 
 // ---------- Discovery and map ----------
+
+export interface SearchCitiesRequest {
+  query: string;
+}
+export interface SearchCitiesResponse {
+  cities: CityLocation[];
+}
 
 export interface ListPlacesRequest {
   city: string;
@@ -127,6 +135,11 @@ export interface UpdateSavedNoteRequest {
 }
 export interface UpdateSavedNoteResponse {
   saved: SavedPlaceView;
+}
+
+export interface RemoveSavedRecommendationRequest {
+  placeId: PlaceId;
+  recommendationId: RecommendationId;
 }
 
 export interface RemoveSavedPlaceRequest {
@@ -289,6 +302,8 @@ export interface PlaceJournalResponse {
  * this so a call like callApi('savePlace', {...}) is type-checked end to end.
  */
 export interface ApiContract {
+  removeSavedRecommendation: { request: RemoveSavedRecommendationRequest; response: SavePlaceResponse };
+  searchCities: { request: SearchCitiesRequest; response: SearchCitiesResponse };
   ensureProfile: { request: EnsureProfileRequest; response: EnsureProfileResponse };
   getProfile: { request: GetProfileRequest; response: GetProfileResponse };
   updateProfile: { request: UpdateProfileRequest; response: UpdateProfileResponse };

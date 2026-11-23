@@ -1,4 +1,4 @@
-import type { PlaceSummary } from '@roami/shared';
+import type { CityLocation, PlaceSummary } from '@roami/shared';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -7,14 +7,15 @@ import {
   Platform,
   Pressable,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type MapView from 'react-native-maps';
 import type { Region } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError, callApi } from '../api';
+import { useCity, nearCity } from '../cities/CityProvider';
+import { CitySelector } from '../cities/CitySelector';
 import { PlaceDetails } from './map/PlaceDetails';
 import { PlaceMap } from './map/PlaceMap';
 import { PlacesPanel } from './map/PlacesPanel';
@@ -24,16 +25,9 @@ import { hasCoordinates } from './map/mapUtils';
 import { usePlaces } from './map/usePlaces';
 import { PlaceResults } from './map/PlaceResults';
 
-const SEATTLE: Region = {
-  latitude: 47.6087,
-  longitude: -122.341,
-  latitudeDelta: 0.06,
-  longitudeDelta: 0.06,
-};
 const NO_PLACES: PlaceSummary[] = [];
 
 interface Props {
-  onSignOut: () => Promise<void>;
   requestedPlaceId?: string;
   requestedRecommendationId?: string;
   onPlaceRequestHandled?: () => void;
@@ -41,24 +35,33 @@ interface Props {
 }
 
 export function MapScreen({
-  onSignOut,
   requestedPlaceId,
   requestedRecommendationId,
   onPlaceRequestHandled,
   savedRefreshKey = 0,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const map = useRef<MapView>(null);
   const lastFit = useRef('');
   const placeRequestVersion = useRef(0);
-  const region = useRef(SEATTLE);
+  const { city: selectedCity, setCity } = useCity();
+  const city = selectedCity.name;
+  const cityRegion = useMemo(
+    () => ({
+      latitude: selectedCity.latitude,
+      longitude: selectedCity.longitude,
+      latitudeDelta: 0.12,
+      longitudeDelta: 0.12,
+    }),
+    [selectedCity],
+  );
+  const region = useRef(cityRegion);
   const mapReady = useRef(false);
-  const [city, setCity] = useState('Seattle');
-  const data = usePlaces(city, savedRefreshKey);
+  const data = usePlaces(city, savedRefreshKey, selectedCity);
   const {
     savedPlaces,
     saveAction,
     loading,
-    error,
     searching,
     savedRefreshError,
     visible,
@@ -66,16 +69,13 @@ export function MapScreen({
     changeSaved,
     resetFilters,
   } = data;
-  const [cityDraft, setCityDraft] = useState(city);
-  const [editingCity, setEditingCity] = useState(false);
   const [selected, setSelected] = useState<PlaceSummary | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string>();
-  const [signOutError, setSignOutError] = useState('');
   const [placeRequestError, setPlaceRequestError] = useState('');
   const openingPlace = Boolean(requestedPlaceId);
-  const [signingOut, setSigningOut] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(600);
+  const panelHeight = Math.max(0, availableHeight - insets.top);
   const mapPlaces = useMemo(() => {
     const currentPins = !loading || data.refreshing ? pins : NO_PLACES;
     return selected && hasCoordinates(selected)
@@ -91,9 +91,9 @@ export function MapScreen({
           latitudeDelta: selected ? 0.008 : 0.06,
           longitudeDelta: selected ? 0.008 : 0.06,
         }
-      : SEATTLE;
-  }, [mapPlaces, selected]);
-  const showMap = mapPlaces.length > 0 && (!error || Boolean(selected));
+      : cityRegion;
+  }, [mapPlaces, selected, cityRegion]);
+  const showMap = true;
   const fitKey = JSON.stringify(
     pins.map(({ id, latitude, longitude }) => [id, latitude, longitude]),
   );
@@ -118,10 +118,20 @@ export function MapScreen({
   }, []);
   useEffect(() => {
     if (!loading && !searching && !selected && fitKey !== lastFit.current) {
-      fitPlaces(visible);
+      if (data.query.trim() || data.category || data.savedOnly) fitPlaces(visible);
       lastFit.current = fitKey;
     }
-  }, [visible, loading, searching, selected, fitKey, fitPlaces]);
+  }, [
+    visible,
+    loading,
+    searching,
+    selected,
+    fitKey,
+    fitPlaces,
+    data.query,
+    data.category,
+    data.savedOnly,
+  ]);
 
   const showPlace = useCallback((place: PlaceSummary, recommendationId?: string) => {
     Keyboard.dismiss();
@@ -162,7 +172,7 @@ export function MapScreen({
     mapReady.current = true;
     const current = mapState.current;
     if (current.selected) current.showPlace(current.selected, current.selectedRecommendationId);
-    else current.fitPlaces(current.visible);
+    else map.current?.animateToRegion(region.current, 300);
   }, []);
   const handleRegionChange = useCallback((next: Region) => {
     region.current = next;
@@ -178,11 +188,20 @@ export function MapScreen({
         if (!active || version !== placeRequestVersion.current) return;
         setPlaceRequestError('');
         if (place.city) {
-          setCity(place.city);
-          setCityDraft(place.city);
+          setCity((current) =>
+            current.name === place.city && nearCity(place, current)
+              ? current
+              : {
+                  id: `place-city:${place.city}:${place.latitude}:${place.longitude}`,
+                  name: place.city!,
+                  region: '',
+                  country: '',
+                  latitude: place.latitude,
+                  longitude: place.longitude,
+                },
+          );
         }
         resetFilters();
-        setEditingCity(false);
         showPlace(place, requestedRecommendationId);
         onPlaceRequestHandled?.();
       })
@@ -199,7 +218,14 @@ export function MapScreen({
     return () => {
       active = false;
     };
-  }, [requestedPlaceId, requestedRecommendationId, onPlaceRequestHandled, showPlace, resetFilters]);
+  }, [
+    requestedPlaceId,
+    requestedRecommendationId,
+    onPlaceRequestHandled,
+    showPlace,
+    resetFilters,
+    setCity,
+  ]);
   function zoom(factor: number) {
     cancelPlaceRequest();
     region.current = {
@@ -209,95 +235,63 @@ export function MapScreen({
     };
     map.current?.animateToRegion(region.current, 200);
   }
-  function applyCity() {
-    const next = cityDraft.trim().replace(/\s+/g, ' ');
-    if (!next) return;
-    cancelPlaceRequest();
-    Keyboard.dismiss();
-    setCity(next);
-    setEditingCity(false);
-    setSelected(null);
-    setPanelExpanded(true);
+  const [lastCityId, setLastCityId] = useState(selectedCity.id);
+  if (lastCityId !== selectedCity.id) {
+    setLastCityId(selectedCity.id);
     resetFilters();
-  }
-  async function handleSignOut() {
-    setSigningOut(true);
-    setSignOutError('');
-    try {
-      await onSignOut();
-    } catch {
-      setSignOutError('Could not sign out. Try again.');
-    } finally {
-      setSigningOut(false);
+    if (!selected || selected.city !== city || !nearCity(selected, selectedCity)) {
+      setSelected(null);
+      setPanelExpanded(false);
     }
+  }
+  const previousCity = useRef(selectedCity.id);
+  useEffect(() => {
+    if (previousCity.current === selectedCity.id) return;
+    previousCity.current = selectedCity.id;
+    const place = mapState.current.selected;
+    if (place && place.city === selectedCity.name && nearCity(place, selectedCity)) return;
+    region.current = cityRegion;
+    map.current?.animateToRegion(cityRegion, 450);
+  }, [selectedCity, cityRegion]);
+  function chooseCity(next: CityLocation) {
+    cancelPlaceRequest();
+    setCity(next);
+    setSelected(null);
+    setPanelExpanded(false);
+    resetFilters();
+    region.current = {
+      latitude: next.latitude,
+      longitude: next.longitude,
+      latitudeDelta: 0.12,
+      longitudeDelta: 0.12,
+    };
+    if (next.id === selectedCity.id) map.current?.animateToRegion(region.current, 450);
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.screen} edges={['left', 'right']}>
       <KeyboardAvoidingView
         style={styles.grow}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Change city: ${city}`}
-            accessibilityState={{ expanded: editingCity }}
-            onPress={() => {
-              cancelPlaceRequest();
-              setCityDraft(city);
-              setEditingCity(!editingCity);
-            }}
-            style={styles.chip}
-          >
-            <Text style={styles.chipText}>{city} ▾</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={signingOut}
-            onPress={() => void handleSignOut()}
-            style={styles.textButton}
-          >
-            <Text style={styles.link}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
-          </Pressable>
-        </View>
         {savedRefreshError !== '' && (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {savedRefreshError}
-          </Text>
-        )}
-        {signOutError !== '' && (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {signOutError}
-          </Text>
+          <View style={styles.notice}>
+            <Text accessibilityRole="alert" style={styles.error}>
+              {savedRefreshError}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={data.refreshPlaces}
+              style={styles.textButton}
+            >
+              <Text style={styles.link}>Retry saved status</Text>
+            </Pressable>
+          </View>
         )}
         {placeRequestError !== '' && (
           <Text accessibilityRole="alert" style={styles.error}>
             {placeRequestError}
           </Text>
-        )}
-        {editingCity && (
-          <View style={styles.cityForm}>
-            <TextInput
-              accessibilityLabel="City name"
-              placeholder="City name, e.g. Seattle"
-              value={cityDraft}
-              onChangeText={setCityDraft}
-              onSubmitEditing={applyCity}
-              returnKeyType="go"
-              autoCapitalize="words"
-              style={[styles.input, styles.grow]}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Apply city"
-              disabled={!cityDraft.trim()}
-              onPress={applyCity}
-              style={styles.chip}
-            >
-              <Text style={styles.link}>Apply</Text>
-            </Pressable>
-          </View>
         )}
         <View
           style={[styles.grow, styles.mapCanvas]}
@@ -312,14 +306,14 @@ export function MapScreen({
                 places={mapPlaces}
                 selectedId={selected?.id}
                 initialRegion={initialMapRegion}
-                bottomInset={Math.min(280, availableHeight * 0.58)}
+                bottomInset={Math.min(280, panelHeight * 0.58)}
                 onReady={handleMapReady}
                 onRegionChange={handleRegionChange}
                 onSelect={select}
               />
             )}
-            {showMap && (
-              <View style={styles.mapTools}>
+            {showMap && Platform.OS !== 'web' && (
+              <View style={[styles.mapTools, { top: insets.top + 12 }]}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Zoom in"
@@ -361,12 +355,22 @@ export function MapScreen({
             )}
           </View>
           <PlacesPanel
-            availableHeight={availableHeight}
+            availableHeight={panelHeight}
             expanded={panelExpanded}
             onExpandedChange={setPanelExpanded}
+            onBack={selected ? () => setSelected(null) : undefined}
+            citySelector={
+              !selected && (
+                <CitySelector
+                  city={selectedCity}
+                  onSelect={chooseCity}
+                  onOpen={cancelPlaceRequest}
+                />
+              )
+            }
             title={
               selected
-                ? 'Place details'
+                ? 'Back to places'
                 : loading
                   ? 'Loading places…'
                   : searching
@@ -385,11 +389,11 @@ export function MapScreen({
                 pending={saveAction.pending}
                 notice={saveAction.placeId === selected.id ? saveAction.notice : ''}
                 saveFailed={saveAction.failed}
-                onClose={() => setSelected(null)}
                 onSave={(recommendationId) =>
                   void changeSaved(selected.id, false, recommendationId)
                 }
                 onUnsave={() => void changeSaved(selected.id, true)}
+                onRemoveRecommendation={(id) => void changeSaved(selected.id, true, id)}
               />
             ) : (
               <PlaceResults
