@@ -20,6 +20,7 @@ import {
   removeSavedRecommendation,
   listSavedPlaces,
   removeSavedPlace,
+  restoreSavedPlace,
   savePlace,
   updateSavedNote,
 } from './SaveService';
@@ -55,6 +56,7 @@ export function registerServices(): void {
     updateSavedNote,
     removeSavedPlace,
     removeSavedRecommendation,
+    restoreSavedPlace,
     createTrip,
     listTrips,
     getTrip,

@@ -42,7 +42,7 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [pending, setPending] = useState('');
-  const [removedName, setRemovedName] = useState('');
+  const [removed, setRemoved] = useState<SavedPlaceView | null>(null);
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [scheduleError, setScheduleError] = useState(false);
   const [scheduleRefresh, setScheduleRefresh] = useState(0);
@@ -59,7 +59,7 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
         if (active && currentRevision === revision.current) {
           setPlaces(saved);
           setError('');
-          setRemovedName('');
+          setRemoved(null);
         }
       })
       .catch(() => {
@@ -104,15 +104,45 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
     revision.current += 1;
     setPending(item.place.id);
     setError('');
-    setRemovedName('');
+    setRemoved(null);
     try {
       await callApi('removeSavedPlace', { placeId: item.place.id });
       revision.current += 1;
       setPlaces((current) => current.filter((entry) => entry.place.id !== item.place.id));
       notifySavedPlacesChanged('saved');
-      setRemovedName(item.place.name);
+      setRemoved(item);
     } catch {
       setError('Could not unsave this place. Please try again.');
+    } finally {
+      busy.current = false;
+      setPending('');
+    }
+  }
+
+  /** Puts back the place that was just removed, with its note, date and sources. */
+  async function undo() {
+    if (!removed || busy.current) return;
+    busy.current = true;
+    revision.current += 1;
+    setPending(removed.place.id);
+    setError('');
+    try {
+      const { saved } = await callApi('restoreSavedPlace', {
+        placeId: removed.place.id,
+        recommendationIds: removed.recommendations.map((rec) => rec.id),
+        personalNote: removed.personalNote,
+        createdAt: removed.createdAt,
+      });
+      revision.current += 1;
+      setPlaces((current) =>
+        [saved, ...current.filter((entry) => entry.place.id !== saved.place.id)].sort(
+          (a, b) => b.createdAt.localeCompare(a.createdAt) || a.place.id.localeCompare(b.place.id),
+        ),
+      );
+      notifySavedPlacesChanged('saved');
+      setRemoved(null);
+    } catch {
+      setError('Could not undo. Please try again.');
     } finally {
       busy.current = false;
       setPending('');
@@ -138,10 +168,20 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
             {error}
           </Text>
         )}
-        {removedName !== '' && !loading && (
-          <Text accessibilityLiveRegion="polite" style={styles.message}>
-            {removedName} removed. You can save it again in Explore.
-          </Text>
+        {removed !== null && !loading && (
+          <View accessibilityLiveRegion="polite" style={styles.undoRow}>
+            <Text style={[styles.message, styles.undoText]}>{removed.place.name} removed.</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Undo removing ${removed.place.name}`}
+              disabled={Boolean(pending)}
+              accessibilityState={{ disabled: Boolean(pending), busy: Boolean(pending) }}
+              onPress={() => void undo()}
+              style={[styles.action, styles.undoButton]}
+            >
+              <Text style={styles.link}>{pending ? 'Restoring…' : 'Undo'}</Text>
+            </Pressable>
+          </View>
         )}
         {scheduleError && (
           <Text style={styles.message}>Could not refresh itinerary locations.</Text>
@@ -322,6 +362,9 @@ const styles = StyleSheet.create({
   link: { ...type.action, color: colors.primary },
   message: { color: colors.muted, fontSize: 14, lineHeight: 21 },
   schedule: { marginTop: 8, color: colors.ink },
+  undoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  undoText: { flexShrink: 1 },
+  undoButton: { marginTop: 0 },
   empty: { gap: 16 },
   primary: {
     ...buttonOutline,
