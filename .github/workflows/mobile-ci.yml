@@ -29,3 +29,27 @@ jobs:
         run: npm run typecheck
       - name: Tests
         run: npm run test:ci
+
+  backend:
+    name: Backend build and emulator tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+      - name: Build backend
+        run: npm --prefix backend run build
+      - name: Test with Firebase emulators
+        run: >-
+          npx --yes firebase-tools emulators:exec --only auth,firestore
+          "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm --prefix backend run test:rules -- --runInBand --testTimeout=60000"

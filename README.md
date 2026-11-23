@@ -274,7 +274,7 @@ The generated backend build output is not source and is omitted from this tree.
 - **Version control:** Work on a branch; do not commit directly to `main`. Use a branch such as `<github-username>/<short-description>` (for example, `bhelle/trips`) and open a pull request for review. The README documents this team practice; no claim is made here about GitHub branch-protection settings.
 - **Bug tracking:** Report defects in [GitHub Issues](https://github.com/penacoat/Roami/issues), including reproduction steps and expected/actual behavior. Link the fixing pull request to its issue (for example, `Fixes #12`).
 - **Build and testing:** Follow the [Build](#build) and [Test](#test) commands. Run formatting and lint checks before opening a pull request.
-- **CI:** [`.github/workflows/mobile-ci.yml`](.github/workflows/mobile-ci.yml) runs on pushes to `main` and pull requests targeting `main`. It uses Node 24 and runs `npm ci`, mobile lint, Prettier format check, TypeScript typecheck, and `npm run test:ci`. It does **not** run the backend build or emulator-backed backend tests; run those locally as documented above.
+- **CI:** [`.github/workflows/mobile-ci.yml`](.github/workflows/mobile-ci.yml) runs on pushes to `main` and pull requests targeting `main`. Its mobile job uses Node 24 for lint, Prettier, typecheck, and Jest. Its backend job uses Node 24 and Java 21 for the TypeScript build and Auth/Firestore emulator tests.
 
 Contributor notes: import shared types with `import type`; prefer additive changes to shared contracts; represent unknown values as `null` rather than `0` or “closed”; and never commit `.env`, service-account keys, `node_modules/`, or debug logs. Do not run `npm audit fix --force`.
 
