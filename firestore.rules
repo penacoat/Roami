@@ -42,9 +42,44 @@ service cloud.firestore {
       return getAfter(tripPath(tripId)).data.revision == get(tripPath(tripId)).data.revision + 1;
     }
 
+    function validStartingPoint(point) {
+      return point is map
+        && point.keys().hasOnly(['label', 'latitude', 'longitude'])
+        && point.keys().hasAll(['label'])
+        && shortString(point.label, 100)
+        && point.label.matches('.*\\S.*')
+        && (!point.keys().hasAny(['latitude', 'longitude'])
+          || (point.keys().hasAll(['latitude', 'longitude'])
+            && point.latitude is number
+            && point.latitude >= -90 && point.latitude <= 90
+            && point.longitude is number
+            && point.longitude >= -180 && point.longitude <= 180));
+    }
+
+    function validStartingPoints(points) {
+      return points is list && points.size() <= 5
+        && (points.size() < 1 || validStartingPoint(points[0]))
+        && (points.size() < 2 || validStartingPoint(points[1]))
+        && (points.size() < 3 || validStartingPoint(points[2]))
+        && (points.size() < 4 || validStartingPoint(points[3]))
+        && (points.size() < 5 || validStartingPoint(points[4]));
+    }
+
+    function validWalkingLimit(limit) {
+      return limit == null
+        || (limit is map
+          && limit.keys().hasOnly(['type', 'value'])
+          && limit.keys().hasAll(['type', 'value'])
+          && limit.type in ['distance', 'duration']
+          && limit.value is int
+          && limit.value > 0
+          && ((limit.type == 'distance' && limit.value <= 100000)
+            || (limit.type == 'duration' && limit.value <= 1440)));
+    }
+
     function validTrip(tripId, d) {
-      return d.keys().hasOnly(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'startingPoints', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
-        && d.keys().hasAll(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'startingPoints', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
+      return d.keys().hasOnly(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'startingPoints', 'walkingLimit', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
         && d.id == tripId
         && shortString(d.city, 100)
         && d.startDate is string && d.startDate.size() == 10
@@ -53,7 +88,8 @@ service cloud.firestore {
         && d.dailyWindow.keys().hasOnly(['start', 'end'])
         && d.dailyWindow.start is string && d.dailyWindow.start.size() == 5
         && d.dailyWindow.end is string && d.dailyWindow.end.size() == 5
-        && d.startingPoints is list && d.startingPoints.size() <= 5
+        && (!d.keys().hasAny(['startingPoints']) || validStartingPoints(d.startingPoints))
+        && (!d.keys().hasAny(['walkingLimit']) || validWalkingLimit(d.walkingLimit))
         && d.candidatePlaceIds is list && d.candidatePlaceIds.size() <= 50
         && d.revision is int
         && d.createdAt is string && d.updatedAt is string;

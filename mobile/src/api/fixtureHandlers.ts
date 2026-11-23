@@ -360,6 +360,7 @@ const tripHandlers: Pick<
       endDate: checked.endDate,
       dailyWindow: checked.dailyWindow,
       startingPoints: checked.startingPoints ?? [],
+      walkingLimit: checked.walkingLimit ?? null,
       candidatePlaceIds: [],
       revision: 1,
       createdAt: stamp,

@@ -65,6 +65,33 @@ describe('createTrip', () => {
     expect(view.stops).toEqual([]);
     expect(fake.get(`trips/${view.trip.id}`)).toEqual(view.trip);
   });
+  it('persists and returns label-only and coordinate starting points plus walking preferences', async () => {
+    fake.uid = 'alice';
+    const request = {
+      ...NEW_TRIP,
+      startingPoints: [
+        { label: 'My hotel' },
+        { label: 'University of Washington', latitude: 47.655, longitude: -122.3035 },
+      ],
+      walkingLimit: { type: 'distance' as const, value: 3_500 },
+    };
+    const created = await createTrip(request);
+    expect(fake.get(`trips/${created.trip.trip.id}`)).toMatchObject({
+      startingPoints: request.startingPoints,
+      walkingLimit: request.walkingLimit,
+    });
+    const loaded = await getTrip({ tripId: created.trip.trip.id });
+    expect(loaded.trip.trip).toMatchObject({
+      startingPoints: request.startingPoints,
+      walkingLimit: request.walkingLimit,
+    });
+  });
+  it('keeps trips without preferences compatible', async () => {
+    const view = await aliceTrip();
+    expect(view.trip.startingPoints).toEqual([]);
+    expect(view.trip.walkingLimit).toBeNull();
+    expect((await getTrip({ tripId: view.trip.id })).trip.trip.walkingLimit).toBeNull();
+  });
   it('refuses invalid dates without saving anything', async () => {
     fake.uid = 'alice';
     await rejectsWith(createTrip({ ...NEW_TRIP, endDate: '2026-11-01' }), 'invalid-argument');

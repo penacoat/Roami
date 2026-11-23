@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import type { TripStop } from '@roami/shared';
+import type { CreateTripRequest, TripStop, WalkingLimit } from '@roami/shared';
 
 import {
   isValidDate,
@@ -50,7 +50,58 @@ describe('dates', () => {
 describe('validateNewTrip', () => {
   it('accepts a valid trip and trims the city', () => {
     const result = validateNewTrip(trip);
-    expect(result).toEqual({ ok: true, value: { ...trip, city: 'Seattle', startingPoints: [] } });
+    expect(result).toEqual({
+      ok: true,
+      value: { ...trip, city: 'Seattle', startingPoints: [], walkingLimit: null },
+    });
+  });
+  it('accepts a label-only starting point and a coordinate-based starting point', () => {
+    expect(
+      validateNewTrip({
+        ...trip,
+        startingPoints: [
+          { label: '  My hotel  ' },
+          { label: 'University of Washington', latitude: 47.655, longitude: -122.3035 },
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        startingPoints: [
+          { label: 'My hotel' },
+          { label: 'University of Washington', latitude: 47.655, longitude: -122.3035 },
+        ],
+      },
+    });
+  });
+  const invalidPreferenceCases: Array<[Partial<CreateTripRequest>, string]> = [
+    [{ startingPoints: [{ label: ' ' }] }, 'Each starting point needs a name.'],
+    [{ startingPoints: [{ label: 'x'.repeat(101) }] }, 'A starting point name is too long.'],
+    [
+      { startingPoints: [{ label: 'Hotel', latitude: 47.6 }] },
+      'Enter both coordinates for a starting point.',
+    ],
+    [
+      { walkingLimit: { type: 'distance', value: 100_001 } },
+      'Walking distance must be at most 100 km.',
+    ],
+    [
+      { walkingLimit: { type: 'duration', value: 1.5 } },
+      'Enter a whole-number walking preference greater than zero.',
+    ],
+  ];
+  it.each(invalidPreferenceCases)('rejects invalid trip preferences %j', (patch, message) => {
+    expect(validateNewTrip({ ...trip, ...patch })).toEqual({ ok: false, error: message });
+  });
+  const validWalkingLimits: WalkingLimit[] = [
+    { type: 'distance', value: 3_500 },
+    { type: 'duration', value: 45 },
+  ];
+  it.each(validWalkingLimits)('accepts walking preference %j', (walkingLimit) => {
+    expect(validateNewTrip({ ...trip, walkingLimit })).toMatchObject({
+      ok: true,
+      value: { walkingLimit },
+    });
   });
   it.each([
     [{ city: '  ' }, 'Choose a city.'],

@@ -416,6 +416,23 @@ export function ItineraryScreen({
                 )}
               </>
             )}
+            {view.trip.startingPoints.map((point, index) => (
+              <Text key={`${point.label}-${index}`} style={styles.muted}>
+                Starting location · {point.label}
+              </Text>
+            ))}
+            {view.trip.walkingLimit && (
+              <>
+                <Text style={styles.muted}>
+                  {view.trip.walkingLimit.type === 'distance'
+                    ? `Max walking distance · ${view.trip.walkingLimit.value / 1_000} km`
+                    : `Max walking duration · ${view.trip.walkingLimit.value} minutes`}
+                </Text>
+                <Text style={styles.muted}>
+                  Saved as a planning preference; walking routes and times are not calculated.
+                </Text>
+              </>
+            )}
             {notice ? (
               <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.muted}>
                 {notice}

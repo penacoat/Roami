@@ -23,7 +23,13 @@ import { minutesOfDay } from '../logic/trips';
 import { timeFromMinutes, formatTime } from '../trips/stopTime';
 import { TimeRangePicker } from '../trips/TimeRangePicker';
 import { TripCalendar } from '../trips/TripCalendar';
-import { formatDate, tripDays, validateTripDraft, type TripDraft } from '../trips/tripDraft';
+import {
+  formatDate,
+  tripDays,
+  tripPreferencesFromDraft,
+  validateTripDraft,
+  type TripDraft,
+} from '../trips/tripDraft';
 import { tripTheme as theme } from '../trips/tripTheme';
 
 const initialDraft: TripDraft = {
@@ -32,6 +38,9 @@ const initialDraft: TripDraft = {
   endDate: '',
   dayStart: '09:00',
   dayEnd: '21:00',
+  startingPointLabel: '',
+  walkingLimitType: null,
+  walkingLimitValue: '',
 };
 const destinations = ['Seattle', 'Portland', 'San Francisco'];
 
@@ -64,6 +73,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
       setError(validation);
       return;
     }
+    const preferences = tripPreferencesFromDraft(draft);
     busy.current = true;
     setSaving(true);
     setError('');
@@ -73,6 +83,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
         startDate: draft.startDate,
         endDate: draft.endDate,
         dailyWindow: { start: draft.dayStart, end: draft.dayEnd },
+        ...preferences,
       });
       setCreatedTrip(result.trip.trip);
       scroll.current?.scrollTo({ y: 0, animated: false });
@@ -182,6 +193,18 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
                   Daily hours · {formatTime(createdTrip.dailyWindow.start)} –{' '}
                   {formatTime(createdTrip.dailyWindow.end)}
                 </Text>
+                {createdTrip.startingPoints[0] && (
+                  <Text style={styles.summaryText}>
+                    Starting location · {createdTrip.startingPoints[0].label}
+                  </Text>
+                )}
+                {createdTrip.walkingLimit && (
+                  <Text style={styles.summaryText}>
+                    {createdTrip.walkingLimit.type === 'distance'
+                      ? `Max walking distance · ${createdTrip.walkingLimit.value / 1_000} km`
+                      : `Max walking duration · ${createdTrip.walkingLimit.value} minutes`}
+                  </Text>
+                )}
               </View>
               {error ? (
                 <Text accessibilityRole="alert" style={styles.error}>
@@ -278,7 +301,86 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionNumber}>03 · DAILY HOURS</Text>
+                <Text style={styles.sectionNumber}>03 · WALKING PREFERENCES</Text>
+                <Text accessibilityRole="header" style={styles.cardTitle}>
+                  Plan around your comfort
+                </Text>
+                <Text style={styles.label}>Starting location · optional</Text>
+                <TextInput
+                  accessibilityLabel="Trip starting location"
+                  style={styles.input}
+                  placeholder="Hotel, address, or landmark"
+                  placeholderTextColor={theme.muted}
+                  value={draft.startingPointLabel}
+                  onChangeText={(startingPointLabel) => update({ startingPointLabel })}
+                  autoCapitalize="words"
+                  maxLength={100}
+                  editable={!saving && !signingOut}
+                />
+                <Text style={styles.preferenceNote}>
+                  Saved as a trip-wide starting location. No geocoding or routing is performed.
+                </Text>
+                <Text style={styles.label}>Maximum comfortable walking · optional</Text>
+                <View style={styles.chips}>
+                  {[
+                    { label: 'No preference', value: null },
+                    { label: 'Distance', value: 'distance' as const },
+                    { label: 'Duration', value: 'duration' as const },
+                  ].map((option) => (
+                    <Pressable
+                      key={option.label}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: draft.walkingLimitType === option.value }}
+                      disabled={saving || signingOut}
+                      onPress={() =>
+                        update({
+                          walkingLimitType: option.value,
+                          walkingLimitValue: option.value ? draft.walkingLimitValue : '',
+                        })
+                      }
+                      style={[
+                        styles.chip,
+                        draft.walkingLimitType === option.value && styles.activeChip,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          draft.walkingLimitType === option.value && styles.activeChipText,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {draft.walkingLimitType && (
+                  <TextInput
+                    accessibilityLabel={
+                      draft.walkingLimitType === 'distance'
+                        ? 'Maximum walking distance in kilometers'
+                        : 'Maximum walking duration in minutes'
+                    }
+                    style={styles.input}
+                    placeholder={
+                      draft.walkingLimitType === 'distance' ? 'e.g. 3.5 km' : 'e.g. 30 min'
+                    }
+                    placeholderTextColor={theme.muted}
+                    value={draft.walkingLimitValue}
+                    onChangeText={(walkingLimitValue) => update({ walkingLimitValue })}
+                    keyboardType="decimal-pad"
+                    maxLength={8}
+                    editable={!saving && !signingOut}
+                  />
+                )}
+                <Text style={styles.preferenceNote}>
+                  Preferences are saved for future itinerary planning. Walking times and routes are
+                  not currently calculated.
+                </Text>
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.sectionNumber}>04 · DAILY HOURS</Text>
                 <Text accessibilityRole="header" style={styles.cardTitle}>
                   Daily planning hours
                 </Text>
@@ -423,6 +525,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   label: { color: theme.text, fontSize: 12, marginBottom: 6, fontWeight: '600' },
+  preferenceNote: { color: theme.muted, fontSize: 12, lineHeight: 18 },
   input: {
     minHeight: 49,
     borderRadius: 8,

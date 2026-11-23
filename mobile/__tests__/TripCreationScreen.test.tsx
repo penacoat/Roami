@@ -1,8 +1,8 @@
 import React from 'react';
-import { beforeEach, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, expect, it, jest } from '@jest/globals';
 import * as api from '../src/api/ApiClient';
 import { resetFixtures } from '../src/api';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { pickTime } from '../test-utils/timePicker';
 import { TripCreationScreen } from '../src/screens/TripCreationScreen';
@@ -19,9 +19,14 @@ jest.mock('@react-native-community/datetimepicker', () =>
 const onSignOut = jest.fn<() => Promise<void>>();
 
 beforeEach(() => {
+  cleanup();
   jest.restoreAllMocks();
   jest.clearAllMocks();
   resetFixtures();
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 async function chooseDayTrip() {
@@ -52,6 +57,27 @@ it('saves a day trip for the signed-in user and resets for another trip', async 
   expect(result.trip.trip.dailyWindow).toEqual({ start: '09:00', end: '21:00' });
   await fireEvent.press(screen.getByRole('button', { name: 'Create another trip' }));
   expect(screen.getByLabelText('City or destination')).toHaveDisplayValue('');
+});
+
+it('saves starting-location and walking preferences and displays them in the itinerary', async () => {
+  const { unmount } = await render(<TripCreationScreen onSignOut={onSignOut} />);
+  await chooseDayTrip();
+  await fireEvent.changeText(screen.getByLabelText('Trip starting location'), 'My hotel');
+  await fireEvent.press(screen.getByRole('button', { name: 'Distance' }));
+  await fireEvent.changeText(
+    screen.getByLabelText('Maximum walking distance in kilometers'),
+    '3.5',
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+  expect(await screen.findByText('Starting location · My hotel')).toBeOnTheScreen();
+  expect(screen.getByText('Max walking distance · 3.5 km')).toBeOnTheScreen();
+  const { trips } = await api.callApi('listTrips', {});
+  const tripId = trips[0].id;
+  expect((await api.callApi('getTrip', { tripId })).trip.trip).toMatchObject({
+    startingPoints: [{ label: 'My hotel' }],
+    walkingLimit: { type: 'distance', value: 3_500 },
+  });
+  unmount();
 });
 
 it('keeps the form and allows retry when the trip service fails', async () => {
