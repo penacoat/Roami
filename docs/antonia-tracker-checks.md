@@ -37,6 +37,8 @@ The new import still stores places in Firestore, so rules still matter. Recommen
 
 ## checks
 
+Checked the current browser preview: no beige header above Explore, no Sign out row, and the city picker is in the drawer. The old preview was serving an earlier build; the open tab now uses `http://localhost:8090/design-review`. This confirms the browser layout, not native phone performance.
+
 40 mobile suites / 323 tests pass, including the matcha-search regression. Mobile lint, formatting, typecheck, backend TypeScript build and git diff checks pass. The earlier backend emulator run passed 6 suites / 128 tests. Native map performance, GPS and VoiceOver still need phone testing.
 
 ## local test setup
