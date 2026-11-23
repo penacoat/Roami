@@ -209,6 +209,7 @@ const discoveryHandlers: Pick<
   | 'ensureProfile'
   | 'getProfile'
   | 'updateProfile'
+  | 'resolveCity'
   | 'listPlaces'
   | 'getPlace'
   | 'getFeed'
@@ -246,6 +247,26 @@ const discoveryHandlers: Pick<
       interests: request.interests ?? profile.interests,
     };
     return clone({ profile });
+  },
+
+  async resolveCity(request) {
+    await delay();
+    // Any name resolves to one sample city. Fixture listPlaces ignores cityId
+    // and has places for Seattle only.
+    const name = request.query.trim().replace(/\s+/g, ' ');
+    if (!name) throw new ApiError('invalid-argument', 'Enter a city name.');
+    const id = [...name.toLowerCase()].reduce((sum, char) => sum * 31 + char.charCodeAt(0), 7);
+    return {
+      matches: [
+        {
+          cityId: `osm-relation-${(id % 900_000) + 100_000}`,
+          name,
+          label: `${name} (sample data)`,
+          latitude: 47.6062,
+          longitude: -122.3321,
+        },
+      ],
+    };
   },
 
   async listPlaces(request) {

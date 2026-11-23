@@ -31,6 +31,15 @@ export interface AuthorSummary {
   name: string;
 }
 
+/** A city the user can pick, from OpenStreetMap's geocoder. */
+export interface CityMatch {
+  cityId: string; // "osm-relation-<id>"
+  name: string; // "Portland"
+  label: string; // "Portland, Oregon, United States", to tell same-named cities apart
+  latitude: number;
+  longitude: number;
+}
+
 export interface PlaceSummary {
   id: PlaceId;
   name: string;

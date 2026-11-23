@@ -7,6 +7,7 @@
 
 export type UserId = string;
 export type PlaceId = string;
+export type CityId = string;
 export type RecommendationId = string;
 export type TripId = string;
 export type TripStopId = string;
@@ -17,6 +18,7 @@ export type ReportId = string;
 export const COLLECTIONS = {
   users: 'users',
   places: 'places',
+  cityImports: 'cityImports',
   recommendations: 'recommendations',
   savedPlaces: 'savedPlaces',
   trips: 'trips',
@@ -56,6 +58,9 @@ export interface Place {
   id: PlaceId;
   name: string;
   city: string;
+  // The OpenStreetMap city it was imported for, e.g. "osm-relation-237385".
+  // Missing on hand-made (manual) places, which are matched by city name.
+  cityId?: CityId;
   latitude: number;
   longitude: number;
   category: string;
@@ -69,6 +74,19 @@ export interface Place {
 export interface KnownCost {
   amount: number;
   currency: string;
+}
+
+/**
+ * cityImports/{cityId}: one per city whose places were imported from
+ * OpenStreetMap. Written last, after the places, so a half-finished import
+ * is retried. The Firestore document also holds an `importedAt` timestamp
+ * that the security rules compare against the refresh period.
+ */
+export interface CityImport {
+  cityId: CityId;
+  name: string; // "Portland"
+  placeCount: number; // how many places the last import found
+  importedAt: string;
 }
 
 // 3. Social recommendations
