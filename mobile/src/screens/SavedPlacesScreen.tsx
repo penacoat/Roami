@@ -15,6 +15,7 @@ import { callApi } from '../api';
 import { buttonOutline } from '../components/buttonStyles';
 import { PlaceJournal } from '../components/PlaceJournal';
 import { AddToItinerary } from '../components/AddToItinerary';
+import { SavedNote } from '../components/SavedNote';
 import {
   notifySavedPlacesChanged,
   useSavedPlacesChangeVersion,
@@ -192,6 +193,16 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
                   </Text>
                 ));
               })}
+              <SavedNote
+                placeId={item.place.id}
+                placeName={item.place.name}
+                note={item.personalNote}
+                onSaved={(saved) =>
+                  setPlaces((current) =>
+                    current.map((entry) => (entry.place.id === saved.place.id ? saved : entry)),
+                  )
+                }
+              />
               <View style={{ marginTop: 10 }}>
                 <AddToItinerary
                   place={item.place}
