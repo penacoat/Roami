@@ -6,6 +6,8 @@ import type {
   RecommendationView,
   RemoveSavedPlaceRequest,
   RemoveSavedPlaceResponse,
+  RestoreSavedPlaceRequest,
+  RestoreSavedPlaceResponse,
   SavedPlace,
   SavedPlaceView,
   SavePlaceRequest,
@@ -171,4 +173,63 @@ export async function removeSavedPlace(
   const placeId = requirePlaceId(request.placeId);
   await changeSave(userId, placeId, (current) => (current ? 'delete' : null));
   return { removed: true };
+}
+
+/**
+ * Undo for a removed save. Puts the place back with its original save date, note,
+ * and the recommendations that still exist. If the user saved the place again in
+ * the meantime, the two are merged: the newer save's note and date win, and the
+ * restored recommendations are added to it. Nothing already saved is overwritten.
+ */
+export async function restoreSavedPlace(
+  request: RestoreSavedPlaceRequest,
+): Promise<RestoreSavedPlaceResponse> {
+  const userId = requireUserId();
+  const placeId = requirePlaceId(request.placeId);
+  if (typeof request.personalNote !== 'string') {
+    throw new ApiError('invalid-argument', 'The note must be text.');
+  }
+  const personalNote = request.personalNote.trim();
+  if (personalNote.length > MAX_NOTE_LENGTH) {
+    throw new ApiError('invalid-argument', `Notes can be at most ${MAX_NOTE_LENGTH} characters.`);
+  }
+  if (
+    !Array.isArray(request.recommendationIds) ||
+    request.recommendationIds.some((id) => typeof id !== 'string' || !id)
+  ) {
+    throw new ApiError('invalid-argument', 'Those recommendation IDs are invalid.');
+  }
+  // An unreadable date falls back to now, so the place still comes back.
+  const createdAt =
+    typeof request.createdAt === 'string' && !Number.isNaN(Date.parse(request.createdAt))
+      ? request.createdAt
+      : new Date().toISOString();
+
+  const wanted = [...new Set(request.recommendationIds)];
+  const [places, recs] = await Promise.all([
+    getPlacesByIds([placeId]),
+    getRecommendationsByIds(wanted),
+  ]);
+  if (!places.has(placeId)) throw new ApiError('not-found', 'That place is not in the catalog.');
+  const stillActive = wanted.filter((id) => {
+    const rec = recs.get(id);
+    return rec?.moderationStatus === 'active' && rec.placeId === placeId;
+  });
+
+  const saved = await changeSave(userId, placeId, (current) => {
+    const merged = [...new Set([...(current?.recommendationIds ?? []), ...stillActive])].slice(
+      0,
+      MAX_RECOMMENDATIONS,
+    );
+    return {
+      id: saveIdFor(userId, placeId),
+      userId,
+      placeId,
+      recommendationIds: merged,
+      personalNote: current?.personalNote || personalNote,
+      createdAt: current?.createdAt ?? createdAt,
+    };
+  });
+  if (!saved) throw new ApiError('internal', 'The place could not be restored. Try again.');
+  return { saved: await toSavedPlaceView(saved) };
 }

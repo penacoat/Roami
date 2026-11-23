@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
@@ -11,12 +11,18 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
+  const generation = useRef(0);
 
   useEffect(() => {
     let active = true;
     callApi('getFeed', { city: 'Seattle' })
-      .then(({ items }) => {
-        if (active) setRecommendations(items.filter((item) => item.status === 'available'));
+      .then(({ items, nextCursor: cursor }) => {
+        if (!active) return;
+        setRecommendations(items.filter((item) => item.status === 'available'));
+        setNextCursor(cursor ?? null);
       })
       .catch(() => {
         if (active) setError('Could not load postcards. Check your connection and try again.');
@@ -29,6 +35,35 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
     };
   }, [refresh]);
 
+  /** Adds the next page below the postcards already shown. */
+  async function loadMore() {
+    if (nextCursor === null || loadingMore) return;
+    const started = generation.current;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const { items, nextCursor: cursor } = await callApi('getFeed', {
+        city: 'Seattle',
+        cursor: nextCursor,
+      });
+      if (started !== generation.current) return; // refreshed while loading
+      setRecommendations((current) => {
+        const seen = new Set(current.map((rec) => rec.id));
+        return [
+          ...current,
+          ...items.filter((item) => item.status === 'available' && !seen.has(item.id)),
+        ];
+      });
+      setNextCursor(cursor ?? null);
+    } catch {
+      if (started === generation.current) {
+        setMoreError('Could not load more postcards. Please try again.');
+      }
+    } finally {
+      if (started === generation.current) setLoadingMore(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -39,6 +74,10 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
           accessibilityRole="button"
           disabled={loading}
           onPress={() => {
+            generation.current += 1; // a "load more" still in flight is now out of date
+            setNextCursor(null);
+            setMoreError('');
+            setLoadingMore(false);
             setLoading(true);
             setError('');
             setRefresh((value) => value + 1);
@@ -59,6 +98,30 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
           recommendations.map((rec) => (
             <PostcardRecommendation key={rec.id} recommendation={rec} onOpenPlace={onOpenPlace} />
           ))
+        )}
+        {!loading && !error && nextCursor !== null && (
+          <>
+            {moreError !== '' && (
+              <Text accessibilityRole="alert" style={styles.notice}>
+                {moreError}
+              </Text>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              disabled={loadingMore}
+              accessibilityState={{ disabled: loadingMore, busy: loadingMore }}
+              onPress={() => void loadMore()}
+              style={styles.more}
+            >
+              <Text style={styles.action}>
+                {loadingMore
+                  ? 'Loading…'
+                  : moreError
+                    ? 'Retry loading more'
+                    : 'Load more postcards'}
+              </Text>
+            </Pressable>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -90,6 +153,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     justifyContent: 'center',
     alignSelf: 'flex-start',
+  },
+  more: {
+    ...buttonOutline,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 24,
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   action: { color: '#283A70', fontSize: 14, fontWeight: '600' },
 });
