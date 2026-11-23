@@ -17,6 +17,28 @@ beforeEach(() => {
   resetFixtures();
 });
 
+it('pulls new saved places and their itinerary locations from an initially empty list', async () => {
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await screen.findByText('Save a place in Explore to find it here.');
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  const { trip } = await api.callApi('createTrip', {
+    city: 'Seattle',
+    startDate: '2026-11-23',
+    endDate: '2026-11-24',
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  await api.callApi('addStop', {
+    tripId: trip.trip.id,
+    expectedRevision: trip.trip.revision,
+    placeId: 'p-jazz',
+    day: 1,
+    visitMinutes: 60,
+  });
+  await fireEvent(screen.getByTestId('saved-places-list'), 'refresh');
+  await screen.findByLabelText('Open saved place: Jazz Alley');
+  await screen.findByText('Scheduled in Seattle (trip starts Nov 23, 2026) · Day 1 · Nov 23, 2026');
+});
+
 it('keeps saved recommendations attached when the place is added to an itinerary', async () => {
   await api.callApi('savePlace', { placeId: 'p-jazz', recommendationId: 'r1' });
   const { trip } = await api.callApi('createTrip', {

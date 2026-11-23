@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import * as api from '../src/api/ApiClient';
 import { resetFixtures } from '../src/api';
@@ -48,4 +48,40 @@ it('explains an empty feed without inventing postcards', async () => {
   await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
   await screen.findByText('No postcards for Seattle yet.');
   expect(screen.queryByText('See place ›')).toBeNull();
+});
+
+it('keeps postcards during a pull, updates the feed, and finishes a failed refresh', async () => {
+  await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
+  await screen.findByLabelText('See place: Jazz Alley, recommended by Maya');
+  const original = api.callApi;
+  let complete!: () => void;
+  let fail = false;
+  const calls = jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'getFeed') {
+      if (fail) return Promise.reject(new Error('offline'));
+      return new Promise((resolve) => {
+        complete = () => resolve({ items: [] });
+      });
+    }
+    return original(name, request);
+  });
+  await act(async () =>
+    screen.getByTestId('postcards-list').props.refreshControl.props.onRefresh(),
+  );
+  expect(screen.getByTestId('postcards-list').props.refreshControl.props.refreshing).toBe(true);
+  expect(screen.getByLabelText('See place: Jazz Alley, recommended by Maya')).toBeTruthy();
+  await act(async () => complete());
+  await screen.findByText('No postcards for Seattle yet.');
+  expect(screen.getByTestId('postcards-list').props.refreshControl.props.refreshing).toBe(false);
+  fail = true;
+  await act(async () =>
+    screen.getByTestId('postcards-list').props.refreshControl.props.onRefresh(),
+  );
+  await screen.findByText('Could not load postcards. Check your connection and try again.');
+  expect(screen.getByTestId('postcards-list').props.refreshControl.props.refreshing).toBe(false);
+  calls.mockImplementation(original);
+  await act(async () =>
+    screen.getByTestId('postcards-list').props.refreshControl.props.onRefresh(),
+  );
+  await screen.findByLabelText('See place: Jazz Alley, recommended by Maya');
 });

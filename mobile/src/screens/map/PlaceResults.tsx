@@ -68,6 +68,7 @@ export function PlaceResults({
     savedOnly,
     setSavedOnly,
     loading,
+    refreshing,
     error,
     searching,
     searchFailed,
@@ -75,8 +76,10 @@ export function PlaceResults({
     matches,
     visible,
     refreshPlaces,
+    pullToRefresh,
     retrySearch,
   } = data;
+  const initialLoading = loading && !refreshing;
   const update = (change: () => void) => () => {
     onInteract();
     change();
@@ -91,7 +94,11 @@ export function PlaceResults({
 
   return (
     <FlatList
-      data={loading || error ? NO_PLACES : visible}
+      testID="explore-places-list"
+      data={initialLoading || error ? NO_PLACES : visible}
+      refreshing={refreshing}
+      onRefresh={pullToRefresh}
+      alwaysBounceVertical
       keyExtractor={(place) => place.id}
       style={styles.grow}
       contentContainerStyle={styles.cards}
@@ -162,7 +169,7 @@ export function PlaceResults({
               <Action text="Retry search" onPress={retrySearch} />
             </View>
           )}
-          {loading ? (
+          {initialLoading ? (
             <ActivityIndicator
               accessibilityLabel="Loading places"
               color={colors.primary}

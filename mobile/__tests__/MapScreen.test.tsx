@@ -17,10 +17,11 @@ jest.mock('react-native-maps', () => {
     animateToRegion = animate;
     fitToCoordinates = fit;
     componentDidMount() {
-      this.props.onMapReady();
+      // Native map readiness arrives after React has attached the ref.
+      queueMicrotask(() => this.props.onMapReady());
     }
     render() {
-      return ReactModule.createElement(View, null, this.props.children);
+      return ReactModule.createElement(View, { testID: 'native-place-map' }, this.props.children);
     }
   }
   return { __esModule: true, default: Map, Marker: View, mapCalls: { animate, fit } };
@@ -35,6 +36,21 @@ beforeEach(() => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
   resetFixtures();
+});
+
+it('does not leave the previous city map visible when the next city has no catalog data', async () => {
+  await render(<MapScreen onSignOut={async () => undefined} />);
+  await screen.findByLabelText('Map pin for Kerry Park');
+  await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
+  expect(screen.queryByTestId('native-place-map')).toBeNull();
+  expect(screen.queryByLabelText('Zoom in')).toBeNull();
+  await fireEvent.press(screen.getByLabelText('Change city: Portland'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'Seattle');
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await screen.findByLabelText('Map pin for Kerry Park');
 });
 
 it('opens the exact postcard recommendation and carries its source into the itinerary', async () => {
@@ -383,10 +399,11 @@ it('treats unknown hours as unknown', async () => {
 it('updates hours from the place-details API instead of keeping an older list value', async () => {
   jest.spyOn(api, 'getApiMode').mockReturnValue('live');
   const original = api.callApi;
+  let hours = 'Monday–Friday 09:00–17:00';
   jest.spyOn(api, 'callApi').mockImplementation(async (name, request) => {
     if (name === 'getPlace' && 'placeId' in request) {
       const details = await original('getPlace', { placeId: request.placeId });
-      return { ...details, place: { ...details.place, openingHours: 'Monday–Friday 09:00–17:00' } };
+      return { ...details, place: { ...details.place, openingHours: hours } };
     }
     return original(name, request);
   });
@@ -394,6 +411,43 @@ it('updates hours from the place-details API instead of keeping an older list va
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.press(screen.getByLabelText('Open Kerry Park'));
   await screen.findByText('Reported hours · Monday–Friday 09:00–17:00');
+  hours = 'Daily 10:00–18:00';
+  await act(async () =>
+    screen.getByTestId('place-details-list').props.refreshControl.props.onRefresh(),
+  );
+  await screen.findByText('Reported hours · Daily 10:00–18:00');
+  expect(screen.getByTestId('place-details-list').props.refreshControl.props.refreshing).toBe(
+    false,
+  );
+});
+
+it('pulls fresh places and saved status without clearing the current list while loading', async () => {
+  await render(<MapScreen onSignOut={async () => undefined} />);
+  await screen.findByLabelText('Open Jazz Alley');
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  const original = api.callApi;
+  let complete!: () => void;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'listPlaces') {
+      return new Promise((resolve) => {
+        complete = () => {
+          void original('listPlaces', { city: 'Seattle' }).then(({ places }) =>
+            resolve({
+              places: places.map((place) =>
+                place.id === 'p-jazz' ? { ...place, name: 'Jazz Alley updated' } : place,
+              ),
+            }),
+          );
+        };
+      });
+    }
+    return original(name, request);
+  });
+  await fireEvent(screen.getByTestId('explore-places-list'), 'refresh');
+  expect(screen.getByLabelText('Open Jazz Alley')).toBeTruthy();
+  await act(async () => complete());
+  await screen.findByLabelText('Open Jazz Alley updated');
+  await screen.findByText('Saved · 1');
 });
 
 it('recovers from a failed place load through Retry', async () => {

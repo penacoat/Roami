@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { callApi } from '../api';
 import { useAuth } from './AuthProvider';
@@ -26,7 +25,6 @@ import {
 import { reportProfileSetupFailed } from './profileSetup';
 import { sendPasswordReset, signIn, signUp } from './AuthService';
 import { buttonOutline } from '../components/buttonStyles';
-import { colors } from '../screens/map/theme';
 
 type Mode = 'signIn' | 'signUp' | 'reset';
 
@@ -176,199 +174,170 @@ export function AuthScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.flex}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          <View style={styles.form}>
-            <Text accessibilityRole="header" style={styles.title}>
-              Roami
-            </Text>
-            <Text accessibilityRole="header" style={styles.subtitle}>
-              {isReset ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
-            </Text>
+        <Text style={styles.title}>Roami</Text>
+        <Text style={styles.subtitle}>
+          {isReset ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
+        </Text>
 
-            {checkFailed && <Banner message={CHECK_FAILED_MESSAGE} onRetry={retryCheck} />}
-            {sessionExpired && mode === 'signIn' && !checkFailed && (
-              <Banner message={SESSION_EXPIRED_MESSAGE} tone="info" />
-            )}
+        {checkFailed && <Banner message={CHECK_FAILED_MESSAGE} onRetry={retryCheck} />}
+        {sessionExpired && mode === 'signIn' && !checkFailed && (
+          <Banner message={SESSION_EXPIRED_MESSAGE} tone="info" />
+        )}
 
-            {isSignUp && (
-              <>
-                <Text style={styles.label}>Name</Text>
-                <TextInput
-                  accessibilityLabel="Name"
-                  style={[styles.input, fieldErrors.name ? styles.inputError : null]}
-                  placeholder="Name"
-                  maxLength={MAX_NAME_LENGTH}
-                  value={name}
-                  onChangeText={(value) => {
-                    setName(value);
-                    clearField('name');
-                  }}
-                  autoCapitalize="words"
-                  autoComplete="name"
-                  editable={!submitting}
-                />
-                <FieldError message={fieldErrors.name} />
-              </>
-            )}
-            <Text style={styles.label}>Email</Text>
+        {isSignUp && (
+          <>
             <TextInput
-              accessibilityLabel="Email"
-              style={[styles.input, fieldErrors.email ? styles.inputError : null]}
-              placeholder="Email"
-              value={email}
+              accessibilityLabel="Name"
+              style={[styles.input, fieldErrors.name ? styles.inputError : null]}
+              placeholder="Name"
+              maxLength={MAX_NAME_LENGTH}
+              value={name}
               onChangeText={(value) => {
-                setEmail(value);
-                clearField('email');
+                setName(value);
+                clearField('name');
               }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              autoComplete="email"
-              editable={!submitting}
+              autoCapitalize="words"
             />
-            <FieldError message={fieldErrors.email} />
-            {!isReset && (
-              <>
-                <Text style={styles.label}>Password</Text>
-                <View style={styles.passwordRow}>
-                  <TextInput
-                    accessibilityLabel="Password"
-                    style={[
-                      styles.input,
-                      styles.passwordInput,
-                      fieldErrors.password ? styles.inputError : null,
-                    ]}
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={(value) => {
-                      setPassword(value);
-                      clearField('password');
-                    }}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                    editable={!submitting}
-                  />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                    accessibilityState={{ checked: showPassword }}
-                    hitSlop={8}
-                    style={styles.eye}
-                    onPress={() => setShowPassword((value) => !value)}
-                  >
-                    <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
-                  </Pressable>
-                </View>
-                <FieldError message={fieldErrors.password} />
-              </>
-            )}
-
-            {mode === 'signIn' && (
+            <FieldError message={fieldErrors.name} />
+          </>
+        )}
+        <TextInput
+          accessibilityLabel="Email"
+          style={[styles.input, fieldErrors.email ? styles.inputError : null]}
+          placeholder="Email"
+          value={email}
+          onChangeText={(value) => {
+            setEmail(value);
+            clearField('email');
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+        />
+        <FieldError message={fieldErrors.email} />
+        {!isReset && (
+          <>
+            <View style={styles.passwordRow}>
+              <TextInput
+                accessibilityLabel="Password"
+                style={[
+                  styles.input,
+                  styles.passwordInput,
+                  fieldErrors.password ? styles.inputError : null,
+                ]}
+                placeholder="Password"
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  clearField('password');
+                }}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
               <Pressable
                 accessibilityRole="button"
-                disabled={submitting}
-                style={styles.forgot}
-                onPress={() => switchMode('reset')}
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                accessibilityState={{ checked: showPassword }}
+                hitSlop={8}
+                style={styles.eye}
+                onPress={() => setShowPassword((value) => !value)}
               >
-                <Text style={styles.link}>Forgot password?</Text>
+                <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
               </Pressable>
-            )}
+            </View>
+            <FieldError message={fieldErrors.password} />
+          </>
+        )}
 
-            {formError && (
-              <Banner
-                message={formError.message}
-                onRetry={formError.retryable ? retry : undefined}
-                retrying={submitting}
-              />
-            )}
-            {notice !== '' && (
-              <Text accessibilityLiveRegion="polite" style={styles.notice}>
-                {notice}
-              </Text>
-            )}
+        {mode === 'signIn' && (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.forgot}
+            onPress={() => switchMode('reset')}
+          >
+            <Text style={styles.link}>Forgot password?</Text>
+          </Pressable>
+        )}
 
-            <Pressable
-              accessibilityRole="button"
-              style={styles.button}
-              onPress={isReset ? handleReset : handleSubmit}
-              disabled={submitting}
-              accessibilityState={{ disabled: submitting, busy: submitting }}
-              accessibilityLabel={isReset ? 'Send reset link' : isSignUp ? 'Sign up' : 'Sign in'}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>
-                  {isReset ? 'Send reset link' : isSignUp ? 'Sign up' : 'Sign in'}
-                </Text>
-              )}
-            </Pressable>
+        {formError && (
+          <Banner
+            message={formError.message}
+            onRetry={formError.retryable ? retry : undefined}
+            retrying={submitting}
+          />
+        )}
+        {notice !== '' && (
+          <Text accessibilityLiveRegion="polite" style={styles.notice}>
+            {notice}
+          </Text>
+        )}
 
-            <Pressable
-              accessibilityRole="button"
-              style={styles.secondary}
-              disabled={submitting}
-              onPress={() => switchMode(isSignUp || isReset ? 'signIn' : 'signUp')}
-            >
-              <Text style={styles.link}>
-                {isSignUp || isReset ? 'Back to sign in' : 'Create an account'}
-              </Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.button}
+          onPress={isReset ? handleReset : handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>
+              {isReset ? 'Send reset link' : isSignUp ? 'Sign up' : 'Sign in'}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          style={styles.secondary}
+          onPress={() => switchMode(isSignUp || isReset ? 'signIn' : 'signUp')}
+        >
+          <Text style={styles.link}>
+            {isSignUp || isReset ? 'Back to sign in' : 'Create an account'}
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.paper },
-  container: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingVertical: 32 },
-  form: { width: '100%', maxWidth: 460, alignSelf: 'center' },
-  title: {
-    fontSize: 52,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    color: colors.primary,
-    textAlign: 'center',
-    marginVertical: 12,
-  },
-  subtitle: { fontSize: 20, textAlign: 'center', marginBottom: 28, color: colors.ink },
-  label: { color: colors.ink, fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  flex: { flex: 1, backgroundColor: '#fff' },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  title: { fontSize: 36, fontWeight: '700', textAlign: 'center' },
+  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: 24, color: '#555' },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    color: colors.ink,
-    borderRadius: 12,
-    minHeight: 52,
+    borderColor: '#ccc',
+    borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     fontSize: 16,
   },
   inputError: { borderColor: '#b3261e', marginBottom: 4 },
   fieldError: { color: '#b3261e', fontSize: 14, lineHeight: 20, marginBottom: 12 },
-  passwordRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
-  passwordInput: { flex: 1, minWidth: 0 },
+  passwordRow: { justifyContent: 'center' },
+  passwordInput: { paddingRight: 64 },
   eye: {
-    minWidth: 56,
-    minHeight: 48,
-    paddingHorizontal: 8,
-    marginBottom: 12,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 12,
+    width: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  eyeText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  eyeText: { color: '#1a73e8', fontSize: 14, fontWeight: '600' },
   banner: {
     backgroundColor: '#fdecea',
     borderColor: '#f1b5b0',
@@ -392,10 +361,9 @@ const styles = StyleSheet.create({
   forgot: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-end', marginBottom: 4 },
   button: {
     ...buttonOutline,
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    minHeight: 52,
+    borderColor: '#175DB8',
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginBottom: 16,
@@ -407,5 +375,5 @@ const styles = StyleSheet.create({
     padding: 12,
     justifyContent: 'center',
   },
-  link: { textAlign: 'center', color: colors.primary, fontSize: 15, fontWeight: '600' },
+  link: { textAlign: 'center', color: '#1a73e8' },
 });

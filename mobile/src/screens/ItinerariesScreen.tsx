@@ -1,6 +1,6 @@
 import type { TripSummary } from '@roami/shared';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { callApi } from '../api';
 import { formatDate } from '../trips/tripDraft';
@@ -19,6 +19,7 @@ export function ItinerariesScreen({
   const [loadedKey, setLoadedKey] = useState('');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const loadKey = JSON.stringify([refreshKey, retry]);
   const loading = loadedKey !== loadKey;
   useEffect(() => {
@@ -34,7 +35,10 @@ export function ItinerariesScreen({
         if (active) setError('Could not load itineraries. Try again.');
       })
       .finally(() => {
-        if (active) setLoadedKey(loadKey);
+        if (active) {
+          setLoadedKey(loadKey);
+          setRefreshing(false);
+        }
       });
     return () => {
       active = false;
@@ -43,7 +47,21 @@ export function ItinerariesScreen({
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        testID="itineraries-list"
+        contentContainerStyle={styles.content}
+        alwaysBounceVertical
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (loading) return;
+              setRefreshing(true);
+              setRetry((value) => value + 1);
+            }}
+          />
+        }
+      >
         <Pressable
           accessibilityRole="button"
           onPress={onCreate}
@@ -51,7 +69,7 @@ export function ItinerariesScreen({
         >
           <Text style={styles.primaryText}>New itinerary</Text>
         </Pressable>
-        {loading ? (
+        {loading && !refreshing ? (
           <ActivityIndicator accessibilityLabel="Loading itineraries" />
         ) : error ? (
           <>

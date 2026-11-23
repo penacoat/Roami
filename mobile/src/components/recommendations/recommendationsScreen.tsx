@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
 import { callApi } from '../../api';
@@ -13,6 +20,7 @@ export function RecommendationsScreen({
 }) {
   const [recommendations, setRecommendations] = useState<RecommendationView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
 
@@ -20,13 +28,19 @@ export function RecommendationsScreen({
     let active = true;
     callApi('getFeed', { city: 'Seattle' })
       .then(({ items }) => {
-        if (active) setRecommendations(items.filter((item) => item.status === 'available'));
+        if (active) {
+          setRecommendations(items.filter((item) => item.status === 'available'));
+          setError('');
+        }
       })
       .catch(() => {
         if (active) setError('Could not load postcards. Check your connection and try again.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       });
     return () => {
       active = false;
@@ -35,11 +49,26 @@ export function RecommendationsScreen({
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView
+        testID="postcards-list"
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        alwaysBounceVertical
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (loading || refreshing) return;
+              setRefreshing(true);
+              setRefresh((value) => value + 1);
+            }}
+          />
+        }
+      >
         <Text style={styles.city}>Seattle</Text>
         <Pressable
           accessibilityRole="button"
-          disabled={loading}
+          disabled={loading || refreshing}
           onPress={() => {
             setLoading(true);
             setError('');

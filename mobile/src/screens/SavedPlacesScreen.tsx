@@ -4,6 +4,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,7 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
   const [loadedKey, setLoadedKey] = useState('');
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [pending, setPending] = useState('');
   const [removedName, setRemovedName] = useState('');
   const [trips, setTrips] = useState<TripSummary[]>([]);
@@ -61,7 +63,10 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
         if (active) setError('Could not load saved places. Please try again.');
       })
       .finally(() => {
-        if (active) setLoadedKey(loadKey);
+        if (active) {
+          setLoadedKey(loadKey);
+          setRefreshing(false);
+        }
       });
     return () => {
       active = false;
@@ -83,6 +88,12 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
       active = false;
     };
   }, [refreshKey, refresh, scheduleRefresh]);
+
+  function pullToRefresh() {
+    if (loading || busy.current) return;
+    setRefreshing(true);
+    setRefresh((value) => value + 1);
+  }
 
   async function unsave(item: SavedPlaceView) {
     if (busy.current) return;
@@ -141,13 +152,28 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
         </Text>
       </Pressable>
       {journalOpen ? (
-        <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
-          <PlaceJournal refreshKey={refreshKey} />
+        <ScrollView
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          alwaysBounceVertical
+          refreshControl={
+            <RefreshControl
+              testID="saved-journal-refresh"
+              refreshing={refreshing}
+              onRefresh={pullToRefresh}
+            />
+          }
+        >
+          <PlaceJournal refreshKey={refreshKey + refresh} />
         </ScrollView>
-      ) : loading ? (
+      ) : loading && !refreshing ? (
         <ActivityIndicator accessibilityLabel="Loading saved places" color={colors.primary} />
       ) : (
         <FlatList
+          testID="saved-places-list"
+          refreshing={refreshing}
+          onRefresh={pullToRefresh}
+          alwaysBounceVertical
           data={places}
           keyExtractor={(item) => item.place.id}
           contentContainerStyle={styles.list}

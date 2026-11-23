@@ -1,5 +1,5 @@
 import type { PlaceSummary } from '@roami/shared';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -76,6 +76,24 @@ export function MapScreen({
   const [signingOut, setSigningOut] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(600);
+  const mapPlaces = useMemo(() => {
+    const currentPins = !loading || data.refreshing ? pins : NO_PLACES;
+    return selected && hasCoordinates(selected)
+      ? [selected, ...currentPins.filter((place) => place.id !== selected.id)]
+      : currentPins;
+  }, [pins, selected, loading, data.refreshing]);
+  const initialMapRegion = useMemo(() => {
+    const first = mapPlaces[0];
+    return first
+      ? {
+          latitude: first.latitude,
+          longitude: first.longitude,
+          latitudeDelta: selected ? 0.008 : 0.06,
+          longitudeDelta: selected ? 0.008 : 0.06,
+        }
+      : SEATTLE;
+  }, [mapPlaces, selected]);
+  const showMap = mapPlaces.length > 0 && (!error || Boolean(selected));
   const fitKey = JSON.stringify(
     pins.map(({ id, latitude, longitude }) => [id, latitude, longitude]),
   );
@@ -199,6 +217,7 @@ export function MapScreen({
     setCity(next);
     setEditingCity(false);
     setSelected(null);
+    setPanelExpanded(true);
     resetFilters();
   }
   async function handleSignOut() {
@@ -287,48 +306,52 @@ export function MapScreen({
           }}
         >
           <View style={styles.mapArea}>
-            <PlaceMap
-              mapRef={map}
-              places={!loading && !error ? pins : NO_PLACES}
-              selectedId={selected?.id}
-              initialRegion={SEATTLE}
-              bottomInset={Math.min(280, availableHeight * 0.58)}
-              onReady={handleMapReady}
-              onRegionChange={handleRegionChange}
-              onSelect={select}
-            />
-            <View style={styles.mapTools}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Zoom in"
-                onPress={() => zoom(0.5)}
-                style={styles.mapButton}
-              >
-                <Text style={styles.zoom}>+</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Zoom out"
-                onPress={() => zoom(2)}
-                style={styles.mapButton}
-              >
-                <Text style={styles.zoom}>−</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Show all visible places on map"
-                disabled={pins.length === 0 || loading}
-                onPress={() => {
-                  cancelPlaceRequest();
-                  fitPlaces(visible);
-                }}
-                style={styles.mapButton}
-              >
-                <Text accessible={false} style={styles.zoom}>
-                  ⌖
-                </Text>
-              </Pressable>
-            </View>
+            {showMap && (
+              <PlaceMap
+                mapRef={map}
+                places={mapPlaces}
+                selectedId={selected?.id}
+                initialRegion={initialMapRegion}
+                bottomInset={Math.min(280, availableHeight * 0.58)}
+                onReady={handleMapReady}
+                onRegionChange={handleRegionChange}
+                onSelect={select}
+              />
+            )}
+            {showMap && (
+              <View style={styles.mapTools}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom in"
+                  onPress={() => zoom(0.5)}
+                  style={styles.mapButton}
+                >
+                  <Text style={styles.zoom}>+</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom out"
+                  onPress={() => zoom(2)}
+                  style={styles.mapButton}
+                >
+                  <Text style={styles.zoom}>−</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Show all visible places on map"
+                  disabled={pins.length === 0 || loading}
+                  onPress={() => {
+                    cancelPlaceRequest();
+                    fitPlaces(visible);
+                  }}
+                  style={styles.mapButton}
+                >
+                  <Text accessible={false} style={styles.zoom}>
+                    ⌖
+                  </Text>
+                </Pressable>
+              </View>
+            )}
             {!loading && pins.length < visible.length && (
               <View style={styles.mapNotice}>
                 <Text style={styles.caption}>

@@ -17,6 +17,7 @@ interface SearchState {
 /** All Explore data comes through the shared API, independent of the map renderer. */
 export function usePlaces(city: string, savedRefreshKey: number) {
   const [refresh, setRefresh] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const savedChanges = useSavedPlacesChangeVersion('explore');
   const [places, setPlaces] = useState<PlaceSummary[]>([]);
   const [savedPlaces, setSavedPlaces] = useState<Map<string, SavedPlaceView>>(new Map());
@@ -66,6 +67,9 @@ export function usePlaces(city: string, savedRefreshKey: number) {
             key: loadKey,
             error: 'Could not load places. Check your connection and try again.',
           });
+      })
+      .finally(() => {
+        if (active) setRefreshing(false);
       });
     return () => {
       active = false;
@@ -185,6 +189,11 @@ export function usePlaces(city: string, savedRefreshKey: number) {
     setRefresh((value) => value + 1);
     setSearchRetry((value) => value + 1);
   }, []);
+  const pullToRefresh = useCallback(() => {
+    if (loading) return;
+    setRefreshing(true);
+    refreshPlaces();
+  }, [loading, refreshPlaces]);
   const resetFilters = useCallback(() => {
     setQuery('');
     setCategory(null);
@@ -201,6 +210,7 @@ export function usePlaces(city: string, savedRefreshKey: number) {
     savedOnly,
     setSavedOnly,
     loading,
+    refreshing,
     error,
     searching,
     searchFailed,
@@ -211,6 +221,7 @@ export function usePlaces(city: string, savedRefreshKey: number) {
     pins,
     changeSaved,
     refreshPlaces,
+    pullToRefresh,
     resetFilters,
     retrySearch: () => setSearchRetry((value) => value + 1),
   };

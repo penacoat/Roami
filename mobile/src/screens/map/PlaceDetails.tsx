@@ -5,6 +5,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -44,6 +45,7 @@ export function PlaceDetails({
   const [place, setPlace] = useState(initialPlace);
   const [recommendations, setRecommendations] = useState<RecommendationView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [linkError, setLinkError] = useState('');
@@ -84,13 +86,17 @@ export function PlaceDetails({
         if (active) {
           setPlace(result.place);
           setRecommendations(result.recommendations);
+          setError('');
         }
       })
       .catch(() => {
         if (active) setError('Recommendations could not load. Try again.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       });
     return () => {
       active = false;
@@ -110,9 +116,21 @@ export function PlaceDetails({
         </Pressable>
       </View>
       <ScrollView
+        testID="place-details-list"
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"
+        alwaysBounceVertical
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (loading || refreshing) return;
+              setRefreshing(true);
+              setRetry((value) => value + 1);
+            }}
+          />
+        }
         keyboardDismissMode="on-drag"
       >
         <Text style={styles.eyebrow}>{place.category.toUpperCase()}</Text>
