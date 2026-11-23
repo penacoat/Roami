@@ -108,7 +108,7 @@ it('protects deep links, signs in with upstream UI, switches real screens, opens
   await fireEvent.press(screen.getByLabelText('Close place details'));
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'jazz');
   await fireEvent.press(screen.getByLabelText('Postcards, tab, 2 of 4'));
-  await screen.findByRole('header', { name: 'Postcards' });
+  expect(screen.queryByRole('header', { name: 'Postcards' })).toBeNull();
   expect(screen).toHavePathname('/postcards');
   await screen.findByLabelText('Read postcard for Jazz Alley by Maya');
   await fireEvent.press(screen.getByLabelText('Read postcard for Jazz Alley by Maya'));

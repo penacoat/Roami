@@ -111,10 +111,10 @@ it.each([
   ['city', 'failure'],
 ])('keeps a newer %s choice when an older place request ends in %s', async (choice, outcome) => {
   const original = api.callApi;
-  const catalog = await original('listPlaces', { city: 'Seattle' });
+  const target = await original('getPlace', { placeId: 'p-jazz' });
   await render(<PlaceRequestHarness />);
   await screen.findByLabelText('Map pin for Kerry Park');
-  let resolve!: (value: typeof catalog) => void;
+  let resolve!: (value: typeof target) => void;
   let reject!: (reason: Error) => void;
   jest.spyOn(api, 'callApi').mockImplementationOnce(
     () =>
@@ -135,7 +135,7 @@ it.each([
     await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
   }
   await act(async () => {
-    if (outcome === 'success') resolve(catalog);
+    if (outcome === 'success') resolve(target);
     else reject(new Error('offline'));
   });
   expect(screen.queryByLabelText('Opening place')).toBeNull();
@@ -159,9 +159,69 @@ it('explains an unavailable postcard target instead of opening an unrelated plac
       onPlaceRequestHandled={consumed}
     />,
   );
-  await screen.findByText('This place is no longer available in the Seattle catalog.');
+  await screen.findByText('This place is no longer available.');
   expect(screen.queryByLabelText('Close place details')).toBeNull();
   expect(consumed).toHaveBeenCalledTimes(1);
+});
+
+it('opens an API place outside Seattle by ID and uses its returned city and coordinates', async () => {
+  const original = api.callApi;
+  const place = {
+    id: 'portland-garden',
+    name: 'Portland Garden',
+    city: 'Portland',
+    latitude: 45.519,
+    longitude: -122.707,
+    category: 'garden',
+    openingHours: null,
+    missingFields: ['openingHours'],
+  };
+  const calls = jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'getPlace' && 'placeId' in request && request.placeId === place.id) {
+      return Promise.resolve({ place, recommendations: [] });
+    }
+    if (name === 'listPlaces' && 'city' in request && request.city === 'Portland') {
+      return Promise.resolve({ places: [place] });
+    }
+    return original(name, request);
+  });
+  function Request() {
+    const [placeId, setPlaceId] = React.useState<string | undefined>(place.id);
+    const clear = React.useCallback(() => setPlaceId(undefined), []);
+    return (
+      <MapScreen
+        onSignOut={async () => undefined}
+        requestedPlaceId={placeId}
+        onPlaceRequestHandled={clear}
+      />
+    );
+  }
+  await render(<Request />);
+  await screen.findByRole('header', { name: place.name });
+  await screen.findByLabelText('Change city: Portland');
+  await screen.findByLabelText('Map pin for Portland Garden');
+  expect(calls).toHaveBeenCalledWith('getPlace', { placeId: place.id });
+  expect(calls).toHaveBeenCalledWith('listPlaces', { city: 'Portland' });
+  const { mapCalls } = jest.requireMock('react-native-maps') as {
+    mapCalls: { animate: ReturnType<typeof jest.fn> };
+  };
+  expect(mapCalls.animate).toHaveBeenCalledWith(
+    expect.objectContaining({ latitude: place.latitude, longitude: place.longitude }),
+    250,
+  );
+});
+
+it('keeps the catalog visible when Saved fails to load', async () => {
+  const original = api.callApi;
+  jest
+    .spyOn(api, 'callApi')
+    .mockImplementation((name, request) =>
+      name === 'listSavedPlaces' ? Promise.reject(new Error('offline')) : original(name, request),
+    );
+  await render(<MapScreen onSignOut={async () => undefined} />);
+  await screen.findByLabelText('Map pin for Jazz Alley');
+  await screen.findByText('Could not refresh Saved. Tap Refresh to try again.');
+  expect(screen.queryByRole('button', { name: 'Retry places' })).toBeNull();
 });
 
 it('opens a map pin, saves its recommendation source, and finds it in Saved', async () => {
@@ -318,6 +378,22 @@ it('treats unknown hours as unknown', async () => {
   await screen.findByLabelText('Open Kerry Park');
   await fireEvent.press(screen.getByLabelText('Open Kerry Park'));
   expect(screen.getByText('Hours not provided')).toBeTruthy();
+});
+
+it('updates hours from the place-details API instead of keeping an older list value', async () => {
+  jest.spyOn(api, 'getApiMode').mockReturnValue('live');
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation(async (name, request) => {
+    if (name === 'getPlace' && 'placeId' in request) {
+      const details = await original('getPlace', { placeId: request.placeId });
+      return { ...details, place: { ...details.place, openingHours: 'Monday–Friday 09:00–17:00' } };
+    }
+    return original(name, request);
+  });
+  await render(<MapScreen onSignOut={async () => undefined} />);
+  await screen.findByLabelText('Open Kerry Park');
+  await fireEvent.press(screen.getByLabelText('Open Kerry Park'));
+  await screen.findByText('Reported hours · Monday–Friday 09:00–17:00');
 });
 
 it('recovers from a failed place load through Retry', async () => {

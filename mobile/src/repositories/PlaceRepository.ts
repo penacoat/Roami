@@ -21,6 +21,7 @@ function toPlaceSummary(id: string, data: DocumentData): PlaceSummary {
   return {
     id,
     name: String(data.name ?? ''),
+    ...(typeof data.city === 'string' && data.city.trim() && { city: data.city.trim() }),
     latitude: Number(data.latitude),
     longitude: Number(data.longitude),
     category: String(data.category ?? ''),

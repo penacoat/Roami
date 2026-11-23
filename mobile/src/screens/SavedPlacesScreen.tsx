@@ -108,9 +108,6 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.heading}>
-        <Text accessibilityRole="header" style={styles.title}>
-          Saved places
-        </Text>
         <Pressable
           accessibilityRole="button"
           disabled={loading || Boolean(pending)}
@@ -223,13 +220,6 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
   heading: { paddingHorizontal: 20, paddingTop: 16 },
-  title: {
-    color: colors.ink,
-    fontSize: 32,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    marginTop: 5,
-  },
   list: { padding: 20, gap: 12 },
   card: {
     borderWidth: 1,

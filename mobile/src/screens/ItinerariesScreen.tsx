@@ -44,9 +44,6 @@ export function ItinerariesScreen({
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={styles.title}>
-          Your itineraries
-        </Text>
         <Pressable
           accessibilityRole="button"
           onPress={onCreate}

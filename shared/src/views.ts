@@ -34,6 +34,7 @@ export interface AuthorSummary {
 export interface PlaceSummary {
   id: PlaceId;
   name: string;
+  city?: string; // Older catalog records may not include a city.
   latitude: number;
   longitude: number;
   category: string;

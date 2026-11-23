@@ -31,7 +31,7 @@ interface Props {
 
 /** Mount with key={place.id}; old requests cannot overwrite another place's details. */
 export function PlaceDetails({
-  place,
+  place: initialPlace,
   highlightedRecommendationId,
   saved,
   pending,
@@ -41,6 +41,7 @@ export function PlaceDetails({
   onUnsave,
   onClose,
 }: Props) {
+  const [place, setPlace] = useState(initialPlace);
   const [recommendations, setRecommendations] = useState<RecommendationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -78,9 +79,12 @@ export function PlaceDetails({
 
   useEffect(() => {
     let active = true;
-    callApi('getPlace', { placeId: place.id })
+    callApi('getPlace', { placeId: initialPlace.id })
       .then((result) => {
-        if (active) setRecommendations(result.recommendations);
+        if (active) {
+          setPlace(result.place);
+          setRecommendations(result.recommendations);
+        }
       })
       .catch(() => {
         if (active) setError('Recommendations could not load. Try again.');
@@ -91,7 +95,7 @@ export function PlaceDetails({
     return () => {
       active = false;
     };
-  }, [place.id, retry]);
+  }, [initialPlace.id, retry]);
 
   return (
     <View style={styles.sheet}>

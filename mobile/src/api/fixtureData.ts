@@ -29,6 +29,7 @@ const place = (
 ): PlaceSummary => ({
   id,
   name,
+  city: 'Seattle',
   latitude,
   longitude,
   category,

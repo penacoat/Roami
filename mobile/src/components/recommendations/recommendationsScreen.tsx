@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RecommendationView } from '@roami/shared';
 import { callApi } from '../../api';
@@ -36,9 +36,6 @@ export function RecommendationsScreen({
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={styles.title}>
-          Postcards
-        </Text>
         <Text style={styles.city}>Seattle</Text>
         <Pressable
           accessibilityRole="button"
@@ -70,9 +67,6 @@ export function RecommendationsScreen({
   );
 }
 
-//title for screen
-const SCRIPT = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -80,12 +74,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-  },
-  title: {
-    fontSize: 32,
-    fontFamily: SCRIPT,
-    color: '#283A70',
-    marginBottom: 6,
   },
   city: { color: '#505A72', fontSize: 14, marginBottom: 16 },
   notice: { color: '#505A72', fontSize: 13, lineHeight: 20 },
