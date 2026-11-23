@@ -218,8 +218,10 @@ export function buildOverpassQuery(relationId: number, part: OverpassPart): stri
           `nwr["natural"="beach"]["name"](${area});`,
         ]
       : [
-          `nwr["amenity"~"^(cafe|restaurant|bar|pub|ice_cream)$"]["name"](${area});`,
-          `nwr["shop"~"^(books|bakery|chocolate|tea)$"]["name"](${area});`,
+          // Nodes and ways only: cafés, restaurants and shops are almost never
+          // relations, and skipping relations makes the query much lighter.
+          `nw["amenity"~"^(cafe|restaurant|bar|pub|ice_cream)$"]["name"](${area});`,
+          `nw["shop"~"^(books|bakery|chocolate|tea)$"]["name"](${area});`,
         ];
   return [
     '[out:json][timeout:90];',
@@ -227,7 +229,7 @@ export function buildOverpassQuery(relationId: number, part: OverpassPart): stri
     '(',
     ...filters.map((filter) => `  ${filter}`),
     ');',
-    'out center tags 1500;',
+    `out center tags ${part === 'sights' ? 1500 : 800};`,
   ].join('\n');
 }
 
@@ -270,7 +272,7 @@ function score(category: OsmCategory, tags: Tags): number {
 
 /**
  * Turns an Overpass answer into places for one city, best first, at most
- * MAX_PLACES_PER_CITY. Elements without a name, location or known category are
+ * `limit` (MAX_PLACES_PER_CITY by default). Elements without a name, location or known category are
  * skipped. Opening hours are kept as OSM writes them ("Mo-Fr 09:00-17:00") and
  * are null (unknown, never "closed") when OSM doesn't have them.
  */
@@ -278,6 +280,7 @@ export function parseOverpass(
   json: unknown,
   city: Pick<CityMatch, 'cityId' | 'name'>,
   retrievedAt: string,
+  limit: number = MAX_PLACES_PER_CITY,
 ): Place[] {
   const elements = (json as { elements?: unknown })?.elements;
   if (!Array.isArray(elements)) return [];
@@ -329,7 +332,7 @@ export function parseOverpass(
         a.place.name.localeCompare(b.place.name) ||
         a.place.id.localeCompare(b.place.id),
     )
-    .slice(0, MAX_PLACES_PER_CITY)
+    .slice(0, Math.max(0, limit))
     .map((entry) => entry.place);
 }
 
