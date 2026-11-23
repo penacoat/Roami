@@ -1,4 +1,4 @@
-import type { PlaceSummary, SavedPlaceView, SearchResult } from '@roami/shared';
+import type { CityMatch, PlaceSummary, SavedPlaceView, SearchResult } from '@roami/shared';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,7 @@ import {
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { callApi } from '../api';
+import { ApiError, callApi } from '../api';
 import { buttonOutline } from '../components/buttonStyles';
 import {
   notifySavedPlacesChanged,
@@ -33,6 +33,9 @@ const SEATTLE: Region = {
   longitudeDelta: 0.06,
 };
 const NO_RESULTS: SearchResult[] = [];
+// After this long, the loading message explains that a new city takes a while.
+const SLOW_LOAD_MS = 2_000;
+const isOsmPlace = (place: PlaceSummary) => place.id.startsWith('osm-');
 const serif = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 const pinColors = [colors.primary, '#39736B', '#875D85', '#98672C', '#556C42'];
 const categoryName = (category: string) => category.trim() || 'Uncategorized';
@@ -71,8 +74,16 @@ export function MapScreen({
   const region = useRef(SEATTLE);
   const mapReady = useRef(false);
   const [city, setCity] = useState('Seattle');
+  // The OpenStreetMap city, once the user picks one. Until then the city is
+  // matched by name only (the hand-made Seattle catalog).
+  const [cityId, setCityId] = useState<string | undefined>(undefined);
   const [cityDraft, setCityDraft] = useState(city);
   const [editingCity, setEditingCity] = useState(false);
+  const [cityMatches, setCityMatches] = useState<CityMatch[]>([]);
+  const [resolvingCity, setResolvingCity] = useState(false);
+  const [cityError, setCityError] = useState('');
+  // The load that has been running longer than SLOW_LOAD_MS, if any.
+  const [slowLoadKey, setSlowLoadKey] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [places, setPlaces] = useState<PlaceSummary[]>([]);
   const [savedPlaces, setSavedPlaces] = useState<Map<string, SavedPlaceView>>(new Map());
@@ -100,10 +111,11 @@ export function MapScreen({
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(600);
   const text = query.trim();
-  const loadKey = JSON.stringify([city, refresh]);
+  const loadKey = JSON.stringify([city, cityId, refresh]);
   const loading = loadStatus.key !== loadKey;
   const error = loading ? '' : loadStatus.error;
-  const searchKey = JSON.stringify([city, text, searchRetry]);
+  const slowLoad = loading && slowLoadKey === loadKey;
+  const searchKey = JSON.stringify([city, cityId, text, searchRetry]);
   const searching = text !== '' && search?.key !== searchKey;
   const searchFailed = text !== '' && search?.key === searchKey && search.status === 'error';
   const results =
@@ -112,7 +124,13 @@ export function MapScreen({
   useEffect(() => {
     let active = true;
     const revision = savedRevision.current;
-    Promise.all([callApi('listPlaces', { city }), callApi('listSavedPlaces', {})])
+    const slowTimer = setTimeout(() => {
+      if (active) setSlowLoadKey(loadKey);
+    }, SLOW_LOAD_MS);
+    Promise.all([
+      callApi('listPlaces', cityId ? { city, cityId } : { city }),
+      callApi('listSavedPlaces', {}),
+    ])
       .then(([placeResult, savedResult]) => {
         if (!active) return;
         setPlaces(placeResult.places);
@@ -120,17 +138,22 @@ export function MapScreen({
           setSavedPlaces(new Map(savedResult.saved.map((item) => [item.place.id, item])));
         setLoadStatus({ key: loadKey, error: '' });
       })
-      .catch(() => {
+      .catch((failure: unknown) => {
         if (active)
           setLoadStatus({
             key: loadKey,
-            error: 'Could not load places. Check your connection and try again.',
+            error:
+              failure instanceof ApiError && failure.code === 'unavailable'
+                ? failure.message
+                : 'Could not load places. Check your connection and try again.',
           });
-      });
+      })
+      .finally(() => clearTimeout(slowTimer));
     return () => {
       active = false;
+      clearTimeout(slowTimer);
     };
-  }, [city, loadKey]);
+  }, [city, cityId, loadKey]);
 
   // Saved can change on another tab while Explore remains mounted.
   useEffect(() => {
@@ -159,7 +182,13 @@ export function MapScreen({
     if (!text) return;
     let active = true;
     const timer = setTimeout(() => {
-      callApi('searchRecommendations', { text, interests: [], city, limit: 50 })
+      callApi('searchRecommendations', {
+        text,
+        interests: [],
+        city,
+        ...(cityId && { cityId }),
+        limit: 50,
+      })
         .then(({ results: matches }) => {
           if (active) setSearch({ key: searchKey, results: matches, status: 'ready' });
         })
@@ -171,7 +200,7 @@ export function MapScreen({
       active = false;
       clearTimeout(timer);
     };
-  }, [city, text, searchKey]);
+  }, [city, cityId, text, searchKey]);
 
   const categories = useMemo(
     () => [...new Set(places.map((place) => categoryName(place.category)))].sort(),
@@ -318,6 +347,7 @@ export function MapScreen({
         setSelected(null);
         if (place) {
           setCity('Seattle');
+          setCityId(undefined);
           setCityDraft('Seattle');
           setQuery('');
           setCategory(null);
@@ -351,16 +381,46 @@ export function MapScreen({
     };
     map.current?.animateToRegion(region.current, 200);
   }
-  function applyCity() {
-    const next = cityDraft.trim().replace(/\s+/g, ' ');
-    if (!next) return;
+  function chooseCity(match: CityMatch) {
     cancelPlaceRequest();
     Keyboard.dismiss();
-    setCity(next);
+    setCity(match.name);
+    setCityId(match.cityId);
+    setCityDraft(match.name);
+    setCityMatches([]);
+    setCityError('');
     setEditingCity(false);
     setCategory(null);
     setSelected(null);
     setQuery('');
+    region.current = {
+      latitude: match.latitude,
+      longitude: match.longitude,
+      latitudeDelta: 0.12,
+      longitudeDelta: 0.12,
+    };
+    map.current?.animateToRegion(region.current, 250);
+  }
+  // Looks the name up once, on submit (OpenStreetMap's geocoder doesn't allow
+  // search-as-you-type). Same-named cities are listed so the user can pick.
+  async function applyCity() {
+    const next = cityDraft.trim().replace(/\s+/g, ' ');
+    if (!next || resolvingCity) return;
+    cancelPlaceRequest();
+    Keyboard.dismiss();
+    setResolvingCity(true);
+    setCityError('');
+    setCityMatches([]);
+    try {
+      const { matches: found } = await callApi('resolveCity', { query: next });
+      if (found.length === 1) chooseCity(found[0]);
+      else if (found.length > 1) setCityMatches(found);
+      else setCityError(`No city called ${next} was found. Check the spelling and try again.`);
+    } catch {
+      setCityError('Could not look up cities right now. Check your connection and try again.');
+    } finally {
+      setResolvingCity(false);
+    }
   }
   async function handleSignOut() {
     setSigningOut(true);
@@ -394,6 +454,8 @@ export function MapScreen({
             onPress={() => {
               cancelPlaceRequest();
               setCityDraft(city);
+              setCityMatches([]);
+              setCityError('');
               setEditingCity(!editingCity);
             }}
             style={styles.chip}
@@ -431,7 +493,7 @@ export function MapScreen({
               placeholder="City name, e.g. Seattle"
               value={cityDraft}
               onChangeText={setCityDraft}
-              onSubmitEditing={applyCity}
+              onSubmitEditing={() => void applyCity()}
               returnKeyType="go"
               autoCapitalize="words"
               style={[styles.input, styles.grow]}
@@ -439,12 +501,33 @@ export function MapScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Apply city"
-              disabled={!cityDraft.trim()}
-              onPress={applyCity}
+              disabled={!cityDraft.trim() || resolvingCity}
+              onPress={() => void applyCity()}
               style={styles.chip}
             >
-              <Text style={styles.link}>Apply</Text>
+              <Text style={styles.link}>{resolvingCity ? 'Finding…' : 'Apply'}</Text>
             </Pressable>
+          </View>
+        )}
+        {editingCity && cityError !== '' && (
+          <Text accessibilityRole="alert" style={[styles.error, styles.cityNote]}>
+            {cityError}
+          </Text>
+        )}
+        {editingCity && cityMatches.length > 0 && (
+          <View style={styles.cityMatches}>
+            <Text style={styles.caption}>Which one?</Text>
+            {cityMatches.map((match) => (
+              <Pressable
+                key={match.cityId}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose ${match.label}`}
+                onPress={() => chooseCity(match)}
+                style={styles.cityMatch}
+              >
+                <Text style={styles.chipText}>{match.label}</Text>
+              </Pressable>
+            ))}
           </View>
         )}
         <View
@@ -517,6 +600,11 @@ export function MapScreen({
                 <Text style={styles.link}>Fit</Text>
               </Pressable>
             </View>
+            {!loading && places.some(isOsmPlace) && (
+              <View style={styles.attribution} pointerEvents="none">
+                <Text style={styles.caption}>© OpenStreetMap contributors</Text>
+              </View>
+            )}
             {!loading && pins.length < visible.length && (
               <View style={styles.mapNotice}>
                 <Text style={styles.caption}>
@@ -676,11 +764,15 @@ export function MapScreen({
                   </View>
                 )}
                 {loading ? (
-                  <ActivityIndicator
-                    accessibilityLabel="Loading places"
-                    color={colors.primary}
-                    style={styles.notice}
-                  />
+                  <View style={styles.notice}>
+                    <ActivityIndicator accessibilityLabel="Loading places" color={colors.primary} />
+                    {slowLoad && (
+                      <Text style={[styles.caption, styles.slowLoad]}>
+                        Still loading {city}. A city opened for the first time can take up to 30
+                        seconds.
+                      </Text>
+                    )}
+                  </View>
                 ) : error ? (
                   <View style={styles.notice}>
                     <Text accessibilityRole="alert" style={styles.error}>
@@ -772,6 +864,19 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: serif, color: colors.ink, fontSize: 27, fontWeight: '700' },
   cityForm: { paddingHorizontal: 18, paddingBottom: 8, flexDirection: 'row', gap: 8 },
+  cityNote: { paddingHorizontal: 18, paddingBottom: 8 },
+  cityMatches: { paddingHorizontal: 18, paddingBottom: 8, gap: 6 },
+  cityMatch: { ...buttonOutline, backgroundColor: colors.white, borderRadius: 9, padding: 10 },
+  slowLoad: { textAlign: 'center', marginTop: 6 },
+  attribution: {
+    position: 'absolute',
+    bottom: 8,
+    right: 12,
+    backgroundColor: colors.white,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
   searchRow: {
     flexDirection: 'row',
     gap: 8,

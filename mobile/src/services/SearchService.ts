@@ -7,9 +7,10 @@ import type {
 } from '@roami/shared';
 
 import { ApiError } from '../api';
+import { relationIdOf } from '../logic/osmPlaces';
 import { parseQuery, rankMatches } from '../logic/searchMatcher';
-import { listPlacesInCity } from '../repositories/PlaceRepository';
 import { listActiveForPlaces } from '../repositories/RecommendationRepository';
+import { listCityPlaces } from './PlaceService';
 import { toRecommendationViews } from './recommendationViews';
 
 const DEFAULT_LIMIT = 20;
@@ -38,21 +39,31 @@ export function clearSearchCache(): void {
   cache.clear();
 }
 
-async function loadCity(city: string): Promise<CityData> {
-  const cached = cache.get(city);
+async function loadCity(city: string, cityId: string | null): Promise<CityData> {
+  const key = cityId ?? city;
+  const cached = cache.get(key);
   if (cached && Date.now() - cached.loadedAt < SEARCH_CACHE_MS) return cached;
 
-  const cityPlaces = await listPlacesInCity(city);
+  const cityPlaces = await listCityPlaces(city, cityId);
   const places = new Map<string, PlaceSummary>(cityPlaces.map((p) => [p.id, p]));
   const recommendations = places.size > 0 ? await listActiveForPlaces([...places.keys()]) : [];
   const data = { loadedAt: Date.now(), places, recommendations };
-  cache.set(city, data);
+  cache.set(key, data);
   return data;
+}
+
+function checkCityId(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || relationIdOf(value) === null) {
+    throw new ApiError('invalid-argument', 'Choose a city.');
+  }
+  return value;
 }
 
 function checkRequest(request: SearchRecommendationsRequest) {
   const city = typeof request.city === 'string' ? request.city.trim() : '';
   if (city.length === 0) throw new ApiError('invalid-argument', 'Choose a city.');
+  const cityId = checkCityId(request.cityId);
 
   const text = typeof request.text === 'string' ? request.text : '';
   if (text.length > MAX_TEXT_LENGTH) {
@@ -74,7 +85,7 @@ function checkRequest(request: SearchRecommendationsRequest) {
   if (!Number.isInteger(requested) || requested < 1) {
     throw new ApiError('invalid-argument', 'The limit must be a whole number of 1 or more.');
   }
-  return { city, text, interests, limit: Math.min(requested, MAX_LIMIT) };
+  return { city, cityId, text, interests, limit: Math.min(requested, MAX_LIMIT) };
 }
 
 /**
@@ -88,8 +99,8 @@ function checkRequest(request: SearchRecommendationsRequest) {
 export async function searchRecommendations(
   request: SearchRecommendationsRequest,
 ): Promise<SearchRecommendationsResponse> {
-  const { city, text, interests, limit } = checkRequest(request);
-  const { places, recommendations } = await loadCity(city);
+  const { city, cityId, text, interests, limit } = checkRequest(request);
+  const { places, recommendations } = await loadCity(city, cityId);
 
   const multiWordTags = recommendations.flatMap((r) => r.tags).filter((t) => t.includes(' '));
   const terms = parseQuery(text, interests, multiWordTags);

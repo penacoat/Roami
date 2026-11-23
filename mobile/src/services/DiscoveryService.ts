@@ -1,8 +1,9 @@
 import type { GetFeedRequest, GetFeedResponse, PlaceSummary } from '@roami/shared';
 
 import { ApiError } from '../api';
-import { listPlacesInCity } from '../repositories/PlaceRepository';
+import { relationIdOf } from '../logic/osmPlaces';
 import { listActiveForPlaces } from '../repositories/RecommendationRepository';
+import { listCityPlaces } from './PlaceService';
 import { toRecommendationViews } from './recommendationViews';
 
 const DEFAULT_FEED_LIMIT = 20;
@@ -21,6 +22,10 @@ const MAX_FEED_LIMIT = 50;
 export async function getFeed(request: GetFeedRequest): Promise<GetFeedResponse> {
   const city = typeof request.city === 'string' ? request.city.trim() : '';
   if (city.length === 0) throw new ApiError('invalid-argument', 'Choose a city.');
+  const cityId = request.cityId ?? null;
+  if (cityId !== null && (typeof cityId !== 'string' || relationIdOf(cityId) === null)) {
+    throw new ApiError('invalid-argument', 'Choose a city.');
+  }
 
   const requested = request.limit ?? DEFAULT_FEED_LIMIT;
   if (!Number.isInteger(requested) || requested < 1) {
@@ -28,7 +33,7 @@ export async function getFeed(request: GetFeedRequest): Promise<GetFeedResponse>
   }
   const limit = Math.min(requested, MAX_FEED_LIMIT);
 
-  const cityPlaces = await listPlacesInCity(city);
+  const cityPlaces = await listCityPlaces(city, cityId);
   if (cityPlaces.length === 0) return { items: [] };
 
   const places = new Map<string, PlaceSummary>(cityPlaces.map((p) => [p.id, p]));

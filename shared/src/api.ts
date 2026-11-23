@@ -1,5 +1,6 @@
 import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
 import type {
+  CityMatch,
   PlaceSummary,
   PublicUser,
   RecommendationView,
@@ -52,8 +53,23 @@ export interface UpdateProfileResponse {
 
 // ---------- Discovery and map ----------
 
+/** Turns what the user typed into cities to choose from. Call once on submit, not per keystroke. */
+export interface ResolveCityRequest {
+  query: string;
+}
+export interface ResolveCityResponse {
+  matches: CityMatch[]; // empty when nothing matched
+}
+
+/**
+ * With cityId, a city opened for the first time is imported from OpenStreetMap
+ * (this can take up to about 30 seconds), and a city imported more than 30 days
+ * ago is refreshed in the background. Without cityId, only places already
+ * stored under that city name are returned.
+ */
 export interface ListPlacesRequest {
   city: string;
+  cityId?: string;
 }
 export interface ListPlacesResponse {
   places: PlaceSummary[];
@@ -70,6 +86,7 @@ export interface GetPlaceResponse {
 
 export interface GetFeedRequest {
   city: string;
+  cityId?: string;
   limit?: number;
 }
 export interface GetFeedResponse {
@@ -80,6 +97,7 @@ export interface SearchRecommendationsRequest {
   text: string;
   interests: string[];
   city: string;
+  cityId?: string;
   limit?: number;
 }
 /** Exact matches come first, then broader matches. Each says why it matched. */
@@ -291,6 +309,7 @@ export interface ApiContract {
   ensureProfile: { request: EnsureProfileRequest; response: EnsureProfileResponse };
   getProfile: { request: GetProfileRequest; response: GetProfileResponse };
   updateProfile: { request: UpdateProfileRequest; response: UpdateProfileResponse };
+  resolveCity: { request: ResolveCityRequest; response: ResolveCityResponse };
   listPlaces: { request: ListPlacesRequest; response: ListPlacesResponse };
   getPlace: { request: GetPlaceRequest; response: GetPlaceResponse };
   getFeed: { request: GetFeedRequest; response: GetFeedResponse };

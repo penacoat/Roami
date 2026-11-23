@@ -172,7 +172,11 @@ it('queries the requested city and clears places from the previous city', async 
   await fireEvent.changeText(screen.getByLabelText('City name'), '  Portland  ');
   await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
   await screen.findByText('No places in the catalog for Portland. Change city or refresh.');
-  expect(calls).toHaveBeenCalledWith('listPlaces', { city: 'Portland' });
+  expect(calls).toHaveBeenCalledWith('resolveCity', { query: 'Portland' });
+  expect(calls).toHaveBeenCalledWith('listPlaces', {
+    city: 'Portland',
+    cityId: expect.stringMatching(/^osm-relation-\d+$/),
+  });
   expect(screen.queryByLabelText('Map pin for Pike Place Market')).toBeNull();
 });
 
@@ -476,4 +480,118 @@ it('keeps the selected map view steady when saving and unsaving', async () => {
   await screen.findByText('Removed from Saved. You can save this place again.');
   expect(mapCalls.animate).not.toHaveBeenCalled();
   expect(mapCalls.fit).not.toHaveBeenCalled();
+});
+
+it('lets the user pick between cities with the same name', async () => {
+  const original = api.callApi;
+  const calls = jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'resolveCity') {
+      return Promise.resolve({
+        matches: [
+          {
+            cityId: 'osm-relation-186579',
+            name: 'Portland',
+            label: 'Portland, Oregon, United States',
+            latitude: 45.52,
+            longitude: -122.67,
+          },
+          {
+            cityId: 'osm-relation-132501',
+            name: 'Portland',
+            label: 'Portland, Maine, United States',
+            latitude: 43.66,
+            longitude: -70.26,
+          },
+        ],
+      }) as ReturnType<typeof original>;
+    }
+    return original(name, request);
+  });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByLabelText('Open Pike Place Market');
+  await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Choose Portland, Maine, United States' }),
+  );
+  await screen.findByLabelText('Change city: Portland');
+  expect(calls).toHaveBeenCalledWith('listPlaces', {
+    city: 'Portland',
+    cityId: 'osm-relation-132501',
+  });
+});
+
+it('explains when no city matches or the lookup fails', async () => {
+  const original = api.callApi;
+  let fail = false;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'resolveCity') {
+      return (
+        fail ? Promise.reject(new Error('offline')) : Promise.resolve({ matches: [] })
+      ) as ReturnType<typeof original>;
+    }
+    return original(name, request);
+  });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByLabelText('Open Pike Place Market');
+  await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'Nowhereville');
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await screen.findByText(
+    'No city called Nowhereville was found. Check the spelling and try again.',
+  );
+  fail = true;
+  await fireEvent.press(screen.getByRole('button', { name: 'Apply city' }));
+  await screen.findByText(
+    'Could not look up cities right now. Check your connection and try again.',
+  );
+  expect(screen.getByLabelText('Change city: Seattle')).toBeTruthy();
+});
+
+it('credits OpenStreetMap when the map shows its places', async () => {
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'listPlaces') {
+      return Promise.resolve({
+        places: [
+          {
+            id: 'osm-node-1',
+            name: 'Imported Museum',
+            latitude: 47.6,
+            longitude: -122.3,
+            category: 'museum',
+            openingHours: null,
+            missingFields: ['openingHours'],
+          },
+        ],
+      }) as ReturnType<typeof original>;
+    }
+    return original(name, request);
+  });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByLabelText('Open Imported Museum');
+  expect(screen.getByText('© OpenStreetMap contributors')).toBeTruthy();
+});
+
+it('explains that a new city can take a while to load', async () => {
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'listPlaces') return new Promise(() => undefined);
+    return original(name, request);
+  });
+  await render(
+    <MapScreen onSignOut={jest.fn<() => Promise<void>>().mockResolvedValue(undefined)} />,
+  );
+  await screen.findByText(
+    'Still loading Seattle. A city opened for the first time can take up to 30 seconds.',
+    {},
+    { timeout: 4000 },
+  );
 });
