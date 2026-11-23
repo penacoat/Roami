@@ -91,6 +91,27 @@ export async function listActiveForPlaces(placeIds: string[]): Promise<Recommend
   return snapshots.flatMap((s) => s.docs.map((d) => toRecommendation(d.id, d.data())));
 }
 
+/** Active recommendations authored by any of these users. */
+export async function listActiveForAuthors(authorIds: string[]): Promise<Recommendation[]> {
+  const unique = [...new Set(authorIds)];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += IN_LIMIT) chunks.push(unique.slice(i, i + IN_LIMIT));
+  const snapshots = await Promise.all(
+    chunks.map((ids) =>
+      getDocs(
+        query(
+          collection(db, RECOMMENDATIONS),
+          where('authorId', 'in', ids),
+          where('moderationStatus', '==', 'active'),
+        ),
+      ),
+    ),
+  );
+  return snapshots.flatMap((snapshot) =>
+    snapshot.docs.map((entry) => toRecommendation(entry.id, entry.data())),
+  );
+}
+
 /**
  * The recommendations among these IDs that the user can see, keyed by ID. The
  * rules hide removed and hidden recommendations from everyone but their

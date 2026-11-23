@@ -1,4 +1,14 @@
-import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
+import type {
+  KnownCost,
+  PlaceId,
+  PreparationTask,
+  Ranking,
+  RecommendationId,
+  StartingPoint,
+  TripId,
+  TripStopId,
+  Visit,
+} from './models';
 import type {
   PlaceSummary,
   PublicUser,
@@ -71,9 +81,31 @@ export interface GetPlaceResponse {
 export interface GetFeedRequest {
   city: string;
   limit?: number;
+  followingOnly?: boolean;
 }
 export interface GetFeedResponse {
   items: RecommendationView[];
+}
+
+export interface GetFollowingResponse {
+  userId: string;
+  userIds: string[];
+}
+
+export interface FollowUserRequest {
+  userId: string;
+}
+
+export interface FollowUserResponse {
+  followed: true;
+}
+
+export interface UnfollowUserRequest {
+  userId: string;
+}
+
+export interface UnfollowUserResponse {
+  unfollowed: true;
 }
 
 export interface SearchRecommendationsRequest {
@@ -294,6 +326,9 @@ export interface ApiContract {
   listPlaces: { request: ListPlacesRequest; response: ListPlacesResponse };
   getPlace: { request: GetPlaceRequest; response: GetPlaceResponse };
   getFeed: { request: GetFeedRequest; response: GetFeedResponse };
+  getFollowing: { request: Record<string, never>; response: GetFollowingResponse };
+  followUser: { request: FollowUserRequest; response: FollowUserResponse };
+  unfollowUser: { request: UnfollowUserRequest; response: UnfollowUserResponse };
   searchRecommendations: {
     request: SearchRecommendationsRequest;
     response: SearchRecommendationsResponse;
@@ -321,10 +356,16 @@ export interface ApiContract {
   updateStopDetails: { request: UpdateStopDetailsRequest; response: AddStopResponse };
   listPreparation: { request: StopPreparationRequest; response: { tasks: PreparationTask[] } };
   savePreparation: { request: SavePreparationRequest; response: { task: PreparationTask } };
-  removePreparation: { request: StopPreparationRequest & { taskId: string }; response: { deleted: true } };
+  removePreparation: {
+    request: StopPreparationRequest & { taskId: string };
+    response: { deleted: true };
+  };
   getPlaceJournal: { request: Record<string, never>; response: PlaceJournalResponse };
   markVisited: { request: { placeId: PlaceId; visitDate: string }; response: { visit: Visit } };
-  saveRanking: { request: { category: string; placeIds: PlaceId[] }; response: PlaceJournalResponse };
+  saveRanking: {
+    request: { category: string; placeIds: PlaceId[] };
+    response: PlaceJournalResponse;
+  };
 }
 
 export type ApiFunctionName = keyof ApiContract;

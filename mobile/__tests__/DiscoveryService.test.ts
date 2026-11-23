@@ -10,6 +10,9 @@ import { fake } from '../test-utils/fakeFirestore';
 
 jest.mock('firebase/firestore', () => require('../test-utils/fakeFirestore').firestoreModule);
 jest.mock('../src/repositories/firestore', () => ({ db: {} }));
+jest.mock('../src/auth/AuthService', () => ({
+  getCurrentUserId: () => require('../test-utils/fakeFirestore').fake.uid,
+}));
 
 function seedPlace(id: string, city = 'Seattle', openingHours: string | null = null) {
   fake.seed(`places/${id}`, {

@@ -3,6 +3,7 @@ import { registerLiveHandlers } from '../api';
 import { getPlaceJournal, markVisited, saveRanking } from './JournalService';
 import { listPreparation, savePreparation, removePreparation } from './PreparationService';
 import { getFeed } from './DiscoveryService';
+import { followUser, getFollowing, unfollowUser } from './FollowService';
 import { getPlace, listPlaces } from './PlaceService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { createRecommendation } from './RecommendationService';
@@ -39,6 +40,9 @@ export function registerServices(): void {
     updateProfile,
     getPlace,
     getFeed,
+    getFollowing,
+    followUser,
+    unfollowUser,
     searchRecommendations,
     createRecommendation,
     savePlace,

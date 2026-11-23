@@ -61,6 +61,7 @@ let counter = 1;
 let tasks = new Map<string, PreparationTask>();
 let visits = new Map<string, Visit>();
 let rankings = new Map<string, Ranking>();
+let follows = new Set<string>();
 
 /** Puts the fixtures back to their starting state (used by tests). */
 export function resetFixtures(): void {
@@ -73,6 +74,7 @@ export function resetFixtures(): void {
   tasks = new Map();
   visits = new Map();
   rankings = new Map();
+  follows = new Set();
 }
 resetFixtures();
 
@@ -212,6 +214,9 @@ const discoveryHandlers: Pick<
   | 'listPlaces'
   | 'getPlace'
   | 'getFeed'
+  | 'getFollowing'
+  | 'followUser'
+  | 'unfollowUser'
   | 'searchRecommendations'
   | 'createRecommendation'
   | 'savePlace'
@@ -263,10 +268,34 @@ const discoveryHandlers: Pick<
 
   async getFeed(request) {
     await delay();
+    const followedIds = new Set([...follows].map((pair) => pair.split(':')[1]));
     const items = [...allRecs()]
+      .filter(
+        (item) => !request.followingOnly || (!!item.author && followedIds.has(item.author.id)),
+      )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, request.limit ?? 20);
     return clone({ items });
+  },
+
+  async getFollowing() {
+    await delay();
+    return clone({ userId: profile.id, userIds: [...follows].map((pair) => pair.split(':')[1]) });
+  },
+
+  async followUser(request) {
+    await delay();
+    if (request.userId === profile.id) {
+      throw new ApiError('invalid-argument', 'You cannot follow yourself.');
+    }
+    follows.add(`${profile.id}:${request.userId}`);
+    return { followed: true };
+  },
+
+  async unfollowUser(request) {
+    await delay();
+    follows.delete(`${profile.id}:${request.userId}`);
+    return { unfollowed: true };
   },
 
   async searchRecommendations(request) {
