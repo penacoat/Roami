@@ -10,6 +10,8 @@ import type {
   ListTripsResponse,
   RemoveCandidateRequest,
   RemoveCandidateResponse,
+  SetTripArchivedRequest,
+  SetTripArchivedResponse,
   Trip,
   TripStop,
   TripStopView,
@@ -152,6 +154,7 @@ export async function listTrips(request: ListTripsRequest): Promise<ListTripsRes
       endDate: trip.endDate,
       candidateCount: trip.candidatePlaceIds.filter((id) => !scheduled.has(id)).length,
       stopCount: stops.length,
+      ...(trip.archivedAt && { archivedAt: trip.archivedAt }),
       ...(request.includeScheduledPlaces && {
         scheduledPlaces: stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
       }),
@@ -159,6 +162,30 @@ export async function listTrips(request: ListTripsRequest): Promise<ListTripsRes
   });
   summaries.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id));
   return { trips: summaries };
+}
+
+/**
+ * Archives a trip, or brings an archived one back. Only the owner can. Nothing
+ * about the trip's plan changes; it just leaves or rejoins the main list.
+ */
+export async function setTripArchived(
+  request: SetTripArchivedRequest,
+): Promise<SetTripArchivedResponse> {
+  const userId = requireUserId();
+  const tripId = requireTripId(request.tripId);
+  if (typeof request.archived !== 'boolean') {
+    throw new ApiError('invalid-argument', 'Choose whether to archive or restore the trip.');
+  }
+  await saveTripChange(tripId, async (current): Promise<TripChange | null> => {
+    const trip = requireOwnedTrip(current, userId);
+    if (Boolean(trip.archivedAt) === request.archived) return null; // already so; save nothing
+    return {
+      trip: nextRevision(trip, {
+        archivedAt: request.archived ? new Date().toISOString() : null,
+      }),
+    };
+  });
+  return { trip: await loadTripView(tripId) };
 }
 
 /** A trip the user owns or that was shared with them (view-only). */

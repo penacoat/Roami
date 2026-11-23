@@ -253,3 +253,24 @@ it('drops the Undo prompt when another place is unsaved', async () => {
   await screen.findByText('Pike Place Market removed.');
   expect(screen.queryByText('Jazz Alley removed.')).toBeNull();
 });
+
+it('does not show scheduling from an archived trip', async () => {
+  const { trip } = await api.callApi('createTrip', {
+    city: 'Seattle',
+    startDate: '2026-11-10',
+    endDate: '2026-11-11',
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await api.callApi('addStop', {
+    tripId: trip.trip.id,
+    expectedRevision: trip.trip.revision,
+    placeId: 'p-jazz',
+    day: 2,
+    visitMinutes: 60,
+  });
+  await api.callApi('setTripArchived', { tripId: trip.trip.id, archived: true });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await screen.findByRole('button', { name: 'Open saved place: Jazz Alley' });
+  expect(screen.queryByText(/^Scheduled in Seattle/)).toBeNull();
+});

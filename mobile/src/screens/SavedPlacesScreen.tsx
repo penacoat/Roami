@@ -81,7 +81,7 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
     callApi('listTrips', { includeScheduledPlaces: true })
       .then(({ trips }) => {
         if (!active) return;
-        setTrips(trips);
+        setTrips(trips.filter((trip) => !trip.archivedAt));
         setScheduleError(false);
       })
       .catch(() => {

@@ -32,6 +32,7 @@ import {
   getTrip,
   listTrips,
   removeCandidate,
+  setTripArchived,
 } from './TripService';
 
 /**
@@ -59,6 +60,7 @@ export function registerServices(): void {
     restoreSavedPlace,
     createTrip,
     listTrips,
+    setTripArchived,
     getTrip,
     deleteTrip,
     addCandidate,

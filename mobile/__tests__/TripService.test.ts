@@ -18,6 +18,7 @@ import {
   getTrip,
   listTrips,
   removeCandidate,
+  setTripArchived,
 } from '../src/services/TripService';
 import { fake } from '../test-utils/fakeFirestore';
 
@@ -193,6 +194,60 @@ it('deletes an owned itinerary, its stops, and its share after checking the revi
   expect(fake.all('tripStops')).toHaveLength(0);
   await expect(deleteTrip({ tripId: trip.id, expectedRevision: 2 })).resolves.toEqual({
     deleted: true,
+  });
+});
+
+describe('setTripArchived', () => {
+  it('archives a trip, keeps its plan, and lists it as archived', async () => {
+    const view = await aliceTrip();
+    const withStop = (
+      await addStop({
+        tripId: view.trip.id,
+        expectedRevision: view.trip.revision,
+        placeId: 'p1',
+        day: 1,
+        visitMinutes: 60,
+      })
+    ).trip;
+    const { trip } = await setTripArchived({ tripId: view.trip.id, archived: true });
+    expect(trip.trip.archivedAt).toEqual(expect.any(String));
+    expect(trip.trip.revision).toBe(withStop.trip.revision + 1);
+    expect(trip.stops.map((s) => s.placeId)).toEqual(['p1']);
+    const { trips } = await listTrips({});
+    expect(trips[0]).toMatchObject({ id: view.trip.id, archivedAt: trip.trip.archivedAt });
+  });
+
+  it('brings an archived trip back, and an active trip lists no archivedAt', async () => {
+    const view = await aliceTrip();
+    await setTripArchived({ tripId: view.trip.id, archived: true });
+    const { trip } = await setTripArchived({ tripId: view.trip.id, archived: false });
+    expect(trip.trip.archivedAt ?? null).toBeNull();
+    expect(fake.get(`trips/${view.trip.id}`)).not.toHaveProperty('archivedAt');
+    const { trips } = await listTrips({});
+    expect(trips[0]).not.toHaveProperty('archivedAt');
+  });
+
+  it('changes nothing when the trip is already in the requested state', async () => {
+    const view = await aliceTrip();
+    const { trip } = await setTripArchived({ tripId: view.trip.id, archived: false });
+    expect(trip.trip.revision).toBe(view.trip.revision);
+    const first = await setTripArchived({ tripId: view.trip.id, archived: true });
+    const again = await setTripArchived({ tripId: view.trip.id, archived: true });
+    expect(again.trip.trip.revision).toBe(first.trip.trip.revision);
+    expect(again.trip.trip.archivedAt).toBe(first.trip.trip.archivedAt);
+  });
+
+  it('lets only the owner archive, and rejects bad input', async () => {
+    const view = await aliceTrip();
+    fake.uid = 'bob';
+    await rejectsWith(setTripArchived({ tripId: view.trip.id, archived: true }), 'not-found');
+    fake.uid = 'alice';
+    await rejectsWith(
+      setTripArchived({ tripId: view.trip.id, archived: 'yes' as unknown as boolean }),
+      'invalid-argument',
+    );
+    await rejectsWith(setTripArchived({ tripId: '', archived: true }), 'invalid-argument');
+    await rejectsWith(setTripArchived({ tripId: 'nope', archived: true }), 'not-found');
   });
 });
 

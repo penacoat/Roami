@@ -203,7 +203,7 @@ function checkWrite(
       if (previous?.ownerId !== uid) throw deny('only the owner can delete a trip');
       return;
     }
-    const { candidateRecommendationIds, ...core } = next;
+    const { candidateRecommendationIds, archivedAt, ...core } = next;
     if (!sameKeys(core, TRIP_FIELDS)) throw deny(`trip fields ${Object.keys(next).join(',')}`);
     if (
       candidateRecommendationIds !== undefined &&
@@ -215,6 +215,14 @@ function checkWrite(
         ))
     )
       throw deny('candidate sources must belong to trip suggestions');
+    // archivedAt is the one other optional field: a short string, or null.
+    if (
+      archivedAt !== undefined &&
+      archivedAt !== null &&
+      !(typeof archivedAt === 'string' && archivedAt.length <= 40)
+    ) {
+      throw deny('archivedAt must be a short string or null');
+    }
     if (next.id !== id) throw deny('trip id must match the document ID');
     if (typeof next.revision !== 'number' || !Number.isInteger(next.revision)) {
       throw deny('revision must be an int');

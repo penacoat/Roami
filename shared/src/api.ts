@@ -217,6 +217,18 @@ export interface ListTripsResponse {
   trips: TripSummary[];
 }
 
+/**
+ * Archives a finished trip (hides it from the main list) or brings it back.
+ * Owner only. Does not need expectedRevision. Doing it twice is harmless.
+ */
+export interface SetTripArchivedRequest {
+  tripId: TripId;
+  archived: boolean;
+}
+export interface SetTripArchivedResponse {
+  trip: TripView;
+}
+
 export interface GetTripRequest {
   tripId: TripId;
 }
@@ -386,6 +398,7 @@ export interface ApiContract {
   restoreSavedPlace: { request: RestoreSavedPlaceRequest; response: RestoreSavedPlaceResponse };
   createTrip: { request: CreateTripRequest; response: CreateTripResponse };
   listTrips: { request: ListTripsRequest; response: ListTripsResponse };
+  setTripArchived: { request: SetTripArchivedRequest; response: SetTripArchivedResponse };
   getTrip: { request: GetTripRequest; response: GetTripResponse };
   deleteTrip: { request: DeleteTripRequest; response: { deleted: true } };
   addCandidate: {

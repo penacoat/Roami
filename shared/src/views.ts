@@ -106,6 +106,8 @@ export interface TripSummary {
   endDate: string;
   candidateCount: number;
   stopCount: number;
+  /** Set only for archived trips. */
+  archivedAt?: string;
   scheduledPlaces?: { placeId: string; day: number }[];
 }
 

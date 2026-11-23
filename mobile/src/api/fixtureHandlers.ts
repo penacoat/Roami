@@ -382,6 +382,7 @@ const tripHandlers: Pick<
   ApiHandlers,
   | 'createTrip'
   | 'listTrips'
+  | 'setTripArchived'
   | 'getTrip'
   | 'deleteTrip'
   | 'addCandidate'
@@ -427,6 +428,7 @@ const tripHandlers: Pick<
         (id) => !r.stops.some((stop) => stop.placeId === id),
       ).length,
       stopCount: r.stops.length,
+      ...(r.trip.archivedAt && { archivedAt: r.trip.archivedAt }),
       ...(request.includeScheduledPlaces && {
         scheduledPlaces: r.stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
       }),
@@ -436,6 +438,20 @@ const tripHandlers: Pick<
         (a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id),
       ),
     });
+  },
+
+  async setTripArchived(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    if (Boolean(record.trip.archivedAt) !== request.archived) {
+      record.trip = {
+        ...record.trip,
+        archivedAt: request.archived ? nowIso() : null,
+        revision: record.trip.revision + 1,
+        updatedAt: nowIso(),
+      };
+    }
+    return clone({ trip: tripView(record) });
   },
 
   async getTrip(request) {
