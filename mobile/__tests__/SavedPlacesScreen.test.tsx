@@ -108,3 +108,62 @@ it('shows the trip and day for a scheduled saved place', async () => {
   await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
   await screen.findByText('Scheduled in Seattle (trip starts Nov 10, 2026) · Day 2 · Nov 11, 2026');
 });
+
+async function openSaved() {
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await screen.findByRole('button', { name: 'Add note to Jazz Alley' });
+}
+
+it('adds a private note to a saved place', async () => {
+  await openSaved();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add note to Jazz Alley' }));
+  await fireEvent.changeText(screen.getByLabelText('Note for Jazz Alley'), '  Book the 8pm show  ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save note for Jazz Alley' }));
+  await screen.findByText('Book the 8pm show');
+  expect(screen.getByText('Your private note')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Edit note for Jazz Alley' })).toBeTruthy();
+  const { saved } = await api.callApi('listSavedPlaces', {});
+  expect(saved[0]?.personalNote).toBe('Book the 8pm show');
+});
+
+it('edits a note and clears it by saving an empty note', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz' });
+  await api.callApi('updateSavedNote', { placeId: 'p-jazz', personalNote: 'Old note' });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await screen.findByText('Old note');
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit note for Jazz Alley' }));
+  expect(screen.getByLabelText('Note for Jazz Alley').props.value).toBe('Old note');
+  await fireEvent.changeText(screen.getByLabelText('Note for Jazz Alley'), 'New note');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save note for Jazz Alley' }));
+  await screen.findByText('New note');
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit note for Jazz Alley' }));
+  await fireEvent.changeText(screen.getByLabelText('Note for Jazz Alley'), '   ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save note for Jazz Alley' }));
+  await screen.findByRole('button', { name: 'Add note to Jazz Alley' });
+  expect(screen.queryByText('Your private note')).toBeNull();
+  expect((await api.callApi('listSavedPlaces', {})).saved[0]?.personalNote).toBe('');
+});
+
+it('discards changes when the user cancels editing a note', async () => {
+  await openSaved();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add note to Jazz Alley' }));
+  await fireEvent.changeText(screen.getByLabelText('Note for Jazz Alley'), 'Never mind');
+  await fireEvent.press(screen.getByRole('button', { name: 'Cancel note for Jazz Alley' }));
+  expect(screen.queryByText('Never mind')).toBeNull();
+  expect((await api.callApi('listSavedPlaces', {})).saved[0]?.personalNote).toBe('');
+});
+
+it('keeps the draft and shows an error when saving a note fails', async () => {
+  await openSaved();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add note to Jazz Alley' }));
+  await fireEvent.changeText(screen.getByLabelText('Note for Jazz Alley'), 'Try again later');
+  jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Save note for Jazz Alley' }));
+  await screen.findByText('Could not save your note. Please try again.');
+  expect(screen.getByLabelText('Note for Jazz Alley').props.value).toBe('Try again later');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save note for Jazz Alley' }));
+  await screen.findByText('Try again later');
+  expect(screen.queryByText('Could not save your note. Please try again.')).toBeNull();
+});
