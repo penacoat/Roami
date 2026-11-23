@@ -68,6 +68,7 @@ export function PlaceResults({
     savedOnly,
     setSavedOnly,
     loading,
+    slowLoad,
     refreshing,
     error,
     searching,
@@ -168,11 +169,18 @@ export function PlaceResults({
             </View>
           )}
           {initialLoading ? (
-            <ActivityIndicator
-              accessibilityLabel="Loading places"
-              color={colors.primary}
-              style={styles.notice}
-            />
+            <View>
+              <ActivityIndicator
+                accessibilityLabel="Loading places"
+                color={colors.primary}
+                style={styles.notice}
+              />
+              {slowLoad && (
+                <Text style={styles.empty}>
+                  Still loading {city}. A first-time city download can take longer.
+                </Text>
+              )}
+            </View>
           ) : error ? (
             <View style={styles.notice}>
               <Text accessibilityRole="alert" style={styles.error}>
@@ -181,6 +189,9 @@ export function PlaceResults({
               <Action text="Retry places" onPress={refreshPlaces} />
             </View>
           ) : null}
+          {places.some((place) => place.id.startsWith('osm-')) && (
+            <Text style={styles.caption}>© OpenStreetMap contributors</Text>
+          )}
         </View>
       }
       ListEmptyComponent={

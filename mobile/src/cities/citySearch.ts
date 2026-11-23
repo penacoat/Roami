@@ -13,37 +13,38 @@ export async function searchCities({ query }: SearchCitiesRequest): Promise<Sear
       { signal: controller.signal },
     );
     if (!response.ok) throw new Error('City lookup unavailable');
-    const body = await response.json();
-    if (body.error || (body.results !== undefined && !Array.isArray(body.results))) {
+    const body: unknown = await response.json();
+    if (!body || typeof body !== 'object' || ('error' in body && body.error)) {
       throw new Error('Invalid city response');
     }
-    const cities: CityLocation[] = (body.results ?? []).flatMap(
-      (value: Record<string, unknown>) => {
-        // Populated places only: exclude regions, postcodes, landmarks and neighborhoods.
-        if (
-          !/^PPL(?:A[2-5]?|C|G|L|R|S)?$/.test(String(value.feature_code)) ||
-          typeof value.id !== 'number' ||
-          typeof value.name !== 'string' ||
-          typeof value.latitude !== 'number' ||
-          !Number.isFinite(value.latitude) ||
-          Math.abs(value.latitude) > 90 ||
-          typeof value.longitude !== 'number' ||
-          !Number.isFinite(value.longitude) ||
-          Math.abs(value.longitude) > 180
-        )
-          return [];
-        return [
-          {
-            id: `geonames:${value.id}`,
-            name: value.name,
-            region: typeof value.admin1 === 'string' ? value.admin1 : '',
-            country: typeof value.country === 'string' ? value.country : '',
-            latitude: value.latitude,
-            longitude: value.longitude,
-          },
-        ];
-      },
-    );
+    const results = 'results' in body ? body.results : [];
+    if (!Array.isArray(results)) throw new Error('Invalid city response');
+    const cities: CityLocation[] = results.flatMap((value: Record<string, unknown> | null) => {
+      // Populated places only: exclude regions, postcodes, landmarks and neighborhoods.
+      if (
+        !value ||
+        !/^PPL(?:A[2-5]?|C|G|L|R|S)?$/.test(String(value.feature_code)) ||
+        typeof value.id !== 'number' ||
+        typeof value.name !== 'string' ||
+        typeof value.latitude !== 'number' ||
+        !Number.isFinite(value.latitude) ||
+        Math.abs(value.latitude) > 90 ||
+        typeof value.longitude !== 'number' ||
+        !Number.isFinite(value.longitude) ||
+        Math.abs(value.longitude) > 180
+      )
+        return [];
+      return [
+        {
+          id: `geonames:${value.id}`,
+          name: value.name,
+          region: typeof value.admin1 === 'string' ? value.admin1 : '',
+          country: typeof value.country === 'string' ? value.country : '',
+          latitude: value.latitude,
+          longitude: value.longitude,
+        },
+      ];
+    });
     return { cities: cities.slice(0, 8) };
   } catch {
     // A network failure is not evidence that the user's city doesn't exist.

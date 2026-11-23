@@ -706,3 +706,107 @@ it('labels website-sourced hours with the checked date and opens their source ev
   await fireEvent.press(screen.getByRole('link', { name: 'Hours source for Seattle Art Museum' }));
   expect(open).toHaveBeenLastCalledWith(url);
 });
+
+it('keeps OpenStreetMap credit when showing imported places', async () => {
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'listPlaces')
+      return Promise.resolve({
+        places: [
+          {
+            id: 'osm-node-1',
+            name: 'Imported Museum',
+            city: 'Seattle',
+            latitude: 47.6,
+            longitude: -122.3,
+            category: 'museum',
+            openingHours: null,
+            missingFields: ['openingHours'],
+          },
+        ],
+      }) as ReturnType<typeof original>;
+    return original(name, request);
+  });
+  await render(<MapScreen />);
+  await screen.findByLabelText('Open Imported Museum');
+  expect(screen.getByText('© OpenStreetMap contributors')).toBeTruthy();
+});
+
+it('explains a slow first city load without blocking map controls', async () => {
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'listPlaces') return new Promise(() => undefined);
+    return original(name, request);
+  });
+  await render(<MapScreen />);
+  await screen.findByText(
+    'Still loading Seattle. A first-time city download can take longer.',
+    {},
+    { timeout: 4000 },
+  );
+  expect(screen.getByLabelText('Zoom in')).toBeEnabled();
+});
+
+it('uses the selected city boundary for imports and search, then restores normal refresh timeouts', async () => {
+  const original = api.callApi;
+  const cityId = 'osm-relation-186579';
+  jest.spyOn(api, 'getApiMode').mockReturnValue('live');
+  const calls = jest.spyOn(api, 'callApi').mockImplementation((name, request, options) => {
+    if (name === 'resolveCity')
+      return Promise.resolve({
+        matches: [
+          {
+            cityId,
+            name: 'Portland',
+            label: 'Portland, Oregon',
+            latitude: 45.52,
+            longitude: -122.67,
+          },
+        ],
+      });
+    if (name === 'listPlaces' && 'cityId' in request && request.cityId === cityId)
+      return Promise.resolve({
+        places: [
+          {
+            id: 'osm-node-2',
+            name: 'Portland Museum',
+            city: 'Portland',
+            cityId,
+            latitude: 45.52,
+            longitude: -122.67,
+            category: 'museum',
+            openingHours: null,
+            missingFields: ['openingHours'],
+          },
+        ],
+      });
+    return original(name, request, options);
+  });
+  await render(<MapScreen />);
+  await screen.findByLabelText('Map pin for Kerry Park');
+  await fireEvent.press(screen.getByLabelText('Change city: Seattle'));
+  await fireEvent.changeText(screen.getByLabelText('City name'), 'Portland');
+  await screen.findByRole('button', { name: /^Select city: Portland/ });
+  expect(calls.mock.calls.some(([name]) => name === 'resolveCity')).toBe(false);
+  await fireEvent.press(screen.getByRole('button', { name: /^Select city: Portland/ }));
+  await screen.findByLabelText('Map pin for Portland Museum');
+  expect(calls).toHaveBeenCalledWith(
+    'listPlaces',
+    { city: 'Portland', cityId },
+    { timeoutMs: api.CITY_IMPORT_TIMEOUT_MS },
+  );
+  await fireEvent.changeText(screen.getByLabelText('Search places'), 'museum');
+  await waitFor(() =>
+    expect(calls).toHaveBeenCalledWith(
+      'searchRecommendations',
+      expect.objectContaining({ text: 'museum', city: 'Portland', cityId }),
+    ),
+  );
+  await fireEvent(screen.getByTestId('explore-places-list'), 'refresh');
+  await waitFor(() =>
+    expect(calls.mock.calls.filter(([name]) => name === 'listPlaces').at(-1)).toEqual([
+      'listPlaces',
+      { city: 'Portland', cityId },
+    ]),
+  );
+});

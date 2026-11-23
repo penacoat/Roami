@@ -4,7 +4,7 @@ import { searchCities } from '../cities/citySearch';
 import { getPlaceJournal, markVisited, saveRanking } from './JournalService';
 import { listPreparation, savePreparation, removePreparation } from './PreparationService';
 import { getFeed } from './DiscoveryService';
-import { getPlace, listPlaces } from './PlaceService';
+import { getPlace, listPlaces, resolveCity } from './PlaceService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { createRecommendation } from './RecommendationService';
 import {
@@ -41,6 +41,7 @@ import {
 export function registerServices(): void {
   registerLiveHandlers({
     searchCities,
+    resolveCity,
     listPlaces,
     ensureProfile,
     getProfile,

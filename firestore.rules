@@ -258,9 +258,73 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
     }
 
-    // Place catalog: read-only from the app (imported by admin script).
+    // ---------- Places imported from OpenStreetMap ----------
+    // Keep in step with mobile/src/logic/osmPlaces.ts: REFRESH_DAYS (30),
+    // MAX_NAME_LENGTH, MAX_HOURS_LENGTH and OSM_CATEGORIES.
+    // The rules can check a place's shape but not that it really came from
+    // OSM, so a signed-in user could add a made-up place. Nobody can delete
+    // places or change hand-made ones.
+
+    function refreshDue(d) {
+      return request.time > d.importedAt + duration.value(30, 'd');
+    }
+
+    function validOsmPlace(placeId, d) {
+      return d.keys().hasOnly(['id', 'name', 'city', 'cityId', 'latitude', 'longitude', 'category', 'openingHours', 'missingFields', 'source', 'updatedAt', 'importedAt'])
+        && d.keys().hasAll(['id', 'name', 'city', 'cityId', 'latitude', 'longitude', 'category', 'openingHours', 'missingFields', 'source', 'updatedAt', 'importedAt'])
+        && d.id == placeId
+        && placeId.matches('osm-(node|way|relation)-[1-9][0-9]{0,15}')
+        && d.source is map
+        && d.source.keys().hasOnly(['provider', 'providerId', 'retrievedAt'])
+        && d.source.keys().hasAll(['provider', 'providerId', 'retrievedAt'])
+        && d.source.provider == 'osm'
+        && d.source.providerId is string
+        && placeId == 'osm-' + d.source.providerId.replace('/', '-')
+        && shortString(d.source.retrievedAt, 40)
+        && shortString(d.name, 200)
+        && shortString(d.city, 100)
+        && d.cityId is string && d.cityId.matches('osm-relation-[1-9][0-9]{0,11}')
+        && d.latitude is number && d.latitude >= -90 && d.latitude <= 90
+        && d.longitude is number && d.longitude >= -180 && d.longitude <= 180
+        && d.category in ['museum', 'gallery', 'attraction', 'viewpoint', 'zoo', 'aquarium', 'theme park', 'landmark', 'theater', 'arts center', 'cinema', 'market', 'library', 'music venue', 'park', 'garden', 'beach', 'cafe', 'restaurant', 'bar', 'dessert shop', 'bookstore', 'bakery', 'chocolate shop', 'tea shop']
+        && (d.openingHours == null || shortString(d.openingHours, 300))
+        && d.missingFields is list && d.missingFields.hasOnly(['openingHours'])
+        && shortString(d.updatedAt, 40)
+        && d.importedAt == request.time;
+    }
+
+    function validCityImport(cityId, d) {
+      return d.keys().hasOnly(['cityId', 'name', 'placeCount', 'importedAt'])
+        && d.keys().hasAll(['cityId', 'name', 'placeCount', 'importedAt'])
+        && d.cityId == cityId
+        && cityId.matches('osm-relation-[1-9][0-9]{0,11}')
+        && shortString(d.name, 100)
+        && d.placeCount is int && d.placeCount >= 0 && d.placeCount <= 400
+        && d.importedAt == request.time;
+    }
+
+    // Place catalog. Hand-made places come from the admin seed script and
+    // can't be changed from the app. Any signed-in user can add a place from
+    // OpenStreetMap, and rewrite one only once it is due for a refresh, without
+    // moving it to another city.
     match /places/{placeId} {
       allow read: if signedIn();
+      allow create: if signedIn() && validOsmPlace(placeId, request.resource.data);
+      allow update: if signedIn()
+        && resource.data.source.provider == 'osm'
+        && refreshDue(resource.data)
+        && validOsmPlace(placeId, request.resource.data)
+        && request.resource.data.cityId == resource.data.cityId;
+    }
+
+    // One record per imported city, written after its places. Rewritten only
+    // when the city is due for a refresh.
+    match /cityImports/{cityId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validCityImport(cityId, request.resource.data);
+      allow update: if signedIn()
+        && refreshDue(resource.data)
+        && validCityImport(cityId, request.resource.data);
     }
 
     // Public content: removed or hidden items are visible only to their author.

@@ -50,3 +50,27 @@ it('does not report a slow write as failed while it could still commit', async (
   await request;
   expect(success).toHaveBeenCalledWith({ deleted: true });
 });
+
+it('lets a first city import finish after the ordinary refresh timeout', async () => {
+  jest.useFakeTimers();
+  let resolve!: (value: { places: [] }) => void;
+  jest.spyOn(fixtureHandlers, 'listPlaces').mockImplementation(
+    () =>
+      new Promise((yes) => {
+        resolve = yes;
+      }),
+  );
+  const success = jest.fn();
+  const failure = jest.fn();
+  const pending = callApi(
+    'listPlaces',
+    { city: 'Portland', cityId: 'osm-relation-186579' },
+    { timeoutMs: 20000 },
+  ).then(success, failure);
+  await jest.advanceTimersByTimeAsync(READ_TIMEOUT_MS + 1);
+  expect(failure).not.toHaveBeenCalled();
+  resolve({ places: [] });
+  await pending;
+  expect(success).toHaveBeenCalledWith({ places: [] });
+  expect(jest.getTimerCount()).toBe(0);
+});

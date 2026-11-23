@@ -7,16 +7,16 @@ import type {
   Trip,
   TripStop,
   UserId,
-} from "./models";
+} from './models';
 
 /** How a search term matched. 'broader' means related, not exact (e.g. "live music" for "jazz"). */
-export type MatchKind = "exact" | "synonym" | "prefix" | "broader";
+export type MatchKind = 'exact' | 'synonym' | 'prefix' | 'broader';
 
 export interface MatchReason {
   kind: MatchKind;
   term: string; // what the user searched for
   matched: string; // the tag or text that matched
-  source: "tag" | "text";
+  source: 'tag' | 'text';
 }
 
 /** Public profile. Never contains email or other private data. */
@@ -37,6 +37,16 @@ export interface CityLocation {
   name: string;
   region: string;
   country: string;
+  cityId?: string; // OSM boundary, resolved only after a city is selected.
+  latitude: number;
+  longitude: number;
+}
+
+/** A city the user can pick, from OpenStreetMap's geocoder. */
+export interface CityMatch {
+  cityId: string; // "osm-relation-<id>"
+  name: string; // "Portland"
+  label: string; // "Portland, Oregon, United States", to tell same-named cities apart
   latitude: number;
   longitude: number;
 }
@@ -45,6 +55,7 @@ export interface PlaceSummary {
   id: PlaceId;
   name: string;
   city?: string; // Older catalog records may not include a city.
+  cityId?: string;
   latitude: number;
   longitude: number;
   category: string;
@@ -65,7 +76,7 @@ export interface PlaceSummary {
  */
 export interface RecommendationView {
   id: RecommendationId;
-  status: "available" | "unavailable";
+  status: 'available' | 'unavailable';
   place: PlaceSummary;
   author: AuthorSummary | null; // null when unavailable
   description: string;
@@ -77,7 +88,7 @@ export interface RecommendationView {
 
 export interface SearchResult {
   recommendation: RecommendationView;
-  matchLevel: "exact" | "broader";
+  matchLevel: 'exact' | 'broader';
   reasons: MatchReason[]; // why it matched, shown in the UI
 }
 

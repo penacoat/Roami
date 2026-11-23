@@ -194,6 +194,7 @@ export function MapScreen({
               : {
                   id: `place-city:${place.city}:${place.latitude}:${place.longitude}`,
                   name: place.city!,
+                  cityId: place.cityId,
                   region: '',
                   country: '',
                   latitude: place.latitude,

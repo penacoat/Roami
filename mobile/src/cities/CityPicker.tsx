@@ -17,6 +17,7 @@ import { callApi } from '../api';
 import { palette, type } from '../design/tokens';
 import { cityLabel } from './CityProvider';
 import { currentCity } from './currentCity';
+import { resolvePlaceCity } from './resolvePlaceCity';
 import { ActionIcon } from '../design/ActionIcon';
 
 export function CityPicker({
@@ -32,6 +33,8 @@ export function CityPicker({
   const [retry, setRetry] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [selecting, setSelecting] = useState(false);
+  const [selectionError, setSelectionError] = useState('');
   const locationRequest = useRef(0);
   const locationBusy = useRef(false);
   useEffect(
@@ -70,11 +73,24 @@ export function CityPicker({
       clearTimeout(timer);
     };
   }, [key, text]);
-  function choose(city: CityLocation) {
-    locationRequest.current += 1;
+  async function choose(city: CityLocation) {
+    const request = ++locationRequest.current;
     Keyboard.dismiss();
-    onSelect(city);
-    onClose();
+    setSelecting(true);
+    setSelectionError('');
+    try {
+      const resolved = await resolvePlaceCity(city);
+      if (request !== locationRequest.current) return;
+      onSelect(resolved);
+      onClose();
+    } catch (error) {
+      if (request === locationRequest.current)
+        setSelectionError(
+          error instanceof Error ? error.message : 'Could not select this city. Try again.',
+        );
+    } finally {
+      if (request === locationRequest.current) setSelecting(false);
+    }
   }
   function close() {
     locationRequest.current += 1;
@@ -89,7 +105,11 @@ export function CityPicker({
     Keyboard.dismiss();
     try {
       const city = await currentCity();
-      if (request === locationRequest.current) choose(city);
+      if (request === locationRequest.current) {
+        locationBusy.current = false;
+        setLocating(false);
+        await choose(city);
+      }
     } catch (error) {
       if (request === locationRequest.current)
         setLocationError(
@@ -125,6 +145,8 @@ export function CityPicker({
             locationBusy.current = false;
             setLocating(false);
             setLocationError('');
+            setSelecting(false);
+            setSelectionError('');
             setQuery(value);
           }}
           maxLength={100}
@@ -160,6 +182,14 @@ export function CityPicker({
             )}
           </>
         )}
+        {selecting && (
+          <ActivityIndicator accessibilityLabel="Loading selected city" color={palette.primary} />
+        )}
+        {!!selectionError && (
+          <Text accessibilityRole="alert" style={styles.hint}>
+            {selectionError}
+          </Text>
+        )}
         <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {text.length < 2 ? (
             <>
@@ -167,7 +197,8 @@ export function CityPicker({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Select city: ${cityLabel(current)}`}
-                onPress={() => choose(current)}
+                disabled={selecting}
+                onPress={() => void choose(current)}
                 style={styles.option}
               >
                 <Text style={styles.action}>{cityLabel(current)}</Text>
@@ -203,7 +234,8 @@ export function CityPicker({
                 key={city.id}
                 accessibilityRole="button"
                 accessibilityLabel={`Select city: ${cityLabel(city)}`}
-                onPress={() => choose(city)}
+                disabled={selecting}
+                onPress={() => void choose(city)}
                 style={styles.option}
               >
                 <Text style={styles.action}>{city.name}</Text>

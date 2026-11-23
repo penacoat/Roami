@@ -1,6 +1,7 @@
 import type { CityLocation, PlaceSummary, SavedPlaceView, SearchResult } from '@roami/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { callApi } from '../../api';
+import { ApiError, callApi } from '../../api';
+import { CITY_IMPORT_TIMEOUT_MS } from '../../api/ApiClient';
 import { nearCity } from '../../cities/CityProvider';
 import {
   notifySavedPlacesChanged,
@@ -23,7 +24,7 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
   const savedChanges = useSavedPlacesChangeVersion('explore');
   const [catalog, setPlaces] = useState<PlaceSummary[]>([]);
   const [catalogCity, setCatalogCity] = useState('');
-  const cityKey = JSON.stringify([city, location?.id]);
+  const cityKey = JSON.stringify([city, location?.id, location?.cityId]);
   const places = catalogCity === cityKey ? catalog : NO_PLACES;
   const [savedPlaces, setSavedPlaces] = useState<Map<string, SavedPlaceView>>(new Map());
   const saveInFlight = useRef(false);
@@ -39,14 +40,15 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
   const [category, setCategory] = useState<string | null>(null);
   const [savedOnly, setSavedOnly] = useState(false);
   const [loadStatus, setLoadStatus] = useState({ key: '', error: '' });
+  const [slowLoadKey, setSlowLoadKey] = useState('');
   const [search, setSearch] = useState<SearchState | null>(null);
   const [searchRetry, setSearchRetry] = useState(0);
   const [savedRefreshError, setSavedRefreshError] = useState('');
   const text = query.trim() ? settledQuery.trim() : '';
-  const loadKey = JSON.stringify([city, location?.id, refresh]);
+  const loadKey = JSON.stringify([city, location?.id, location?.cityId, refresh]);
   const loading = loadStatus.key !== loadKey;
   const error = loading ? '' : loadStatus.error;
-  const searchKey = JSON.stringify([city, location?.id, text, searchRetry]);
+  const searchKey = JSON.stringify([city, location?.id, location?.cityId, text, searchRetry]);
   const searching = query.trim() !== text || (text !== '' && search?.key !== searchKey);
   const searchFailed = text !== '' && search?.key === searchKey && search.status === 'error';
   const results =
@@ -60,7 +62,16 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
 
   useEffect(() => {
     let active = true;
-    callApi('listPlaces', { city })
+    const slowTimer = setTimeout(() => {
+      if (active) setSlowLoadKey(loadKey);
+    }, 2000);
+    const request = { city, ...(location?.cityId && { cityId: location.cityId }) };
+    const options =
+      location?.cityId && catalogCity !== cityKey
+        ? { timeoutMs: CITY_IMPORT_TIMEOUT_MS }
+        : undefined;
+    // New-city imports need their provider timeout; ordinary refreshes retain the short read timeout.
+    (options ? callApi('listPlaces', request, options) : callApi('listPlaces', request))
       .then(({ places: catalog }) => {
         if (!active) return;
         const next = location
@@ -68,6 +79,7 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
               (place) =>
                 !Number.isFinite(place.latitude) ||
                 !Number.isFinite(place.longitude) ||
+                (location.cityId && place.cityId === location.cityId) ||
                 nearCity(place, location),
             )
           : catalog;
@@ -75,19 +87,26 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
         setCatalogCity(cityKey);
         setLoadStatus({ key: loadKey, error: '' });
       })
-      .catch(() => {
+      .catch((failure: unknown) => {
         if (active)
           setLoadStatus({
             key: loadKey,
-            error: 'Could not load places. Check your connection and try again.',
+            error:
+              failure instanceof ApiError && failure.code === 'unavailable'
+                ? failure.message
+                : 'Could not load places. Check your connection and try again.',
           });
       })
       .finally(() => {
+        clearTimeout(slowTimer);
         if (active) setRefreshing(false);
       });
     return () => {
       active = false;
+      clearTimeout(slowTimer);
     };
+    // catalogCity is deliberately captured at the start of this load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, cityKey, loadKey, location]);
 
   // Saved can change on another tab while Explore remains mounted.
@@ -118,7 +137,13 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
   useEffect(() => {
     if (!text) return;
     let active = true;
-    callApi('searchRecommendations', { text, interests: [], city, limit: 50 })
+    callApi('searchRecommendations', {
+      text,
+      interests: [],
+      city,
+      ...(location?.cityId && { cityId: location.cityId }),
+      limit: 50,
+    })
       .then(({ results: matches }) => {
         if (active) setSearch({ key: searchKey, results: matches, status: 'ready' });
       })
@@ -128,7 +153,7 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
     return () => {
       active = false;
     };
-  }, [city, text, searchKey]);
+  }, [city, text, searchKey, location?.cityId]);
 
   const categories = useMemo(
     () => [...new Set(places.map((place) => categoryName(place.category)))].sort(),
@@ -236,6 +261,7 @@ export function usePlaces(city: string, savedRefreshKey: number, location?: City
     savedOnly,
     setSavedOnly,
     loading,
+    slowLoad: loading && slowLoadKey === loadKey,
     refreshing,
     error,
     searching,

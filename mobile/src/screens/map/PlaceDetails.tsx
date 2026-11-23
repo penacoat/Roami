@@ -246,6 +246,9 @@ export function PlaceDetails({
           onSave={onSave}
           onRemove={onRemoveRecommendation}
         />
+        {place.id.startsWith('osm-') && (
+          <Text style={styles.hours}>© OpenStreetMap contributors</Text>
+        )}
         {linkError !== '' && (
           <Text accessibilityRole="alert" style={styles.notice}>
             {linkError}

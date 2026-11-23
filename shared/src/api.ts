@@ -1,6 +1,17 @@
-import type { KnownCost, PlaceId, PreparationTask, Ranking, RecommendationId, StartingPoint, TripId, TripStopId, Visit } from './models';
+import type {
+  KnownCost,
+  PlaceId,
+  PreparationTask,
+  Ranking,
+  RecommendationId,
+  StartingPoint,
+  TripId,
+  TripStopId,
+  Visit,
+} from './models';
 import type {
   CityLocation,
+  CityMatch,
   PlaceSummary,
   PublicUser,
   RecommendationView,
@@ -60,8 +71,23 @@ export interface SearchCitiesResponse {
   cities: CityLocation[];
 }
 
+/** Turns what the user typed into cities to choose from. Call once on submit, not per keystroke. */
+export interface ResolveCityRequest {
+  query: string;
+}
+export interface ResolveCityResponse {
+  matches: CityMatch[]; // empty when nothing matched
+}
+
+/**
+ * With cityId, a city opened for the first time is imported from OpenStreetMap
+ * (this can take up to about 30 seconds), and a city imported more than 30 days
+ * ago is refreshed in the background. Without cityId, only places already
+ * stored under that city name are returned.
+ */
 export interface ListPlacesRequest {
   city: string;
+  cityId?: string;
 }
 export interface ListPlacesResponse {
   places: PlaceSummary[];
@@ -78,6 +104,7 @@ export interface GetPlaceResponse {
 
 export interface GetFeedRequest {
   city: string;
+  cityId?: string;
   limit?: number;
 }
 export interface GetFeedResponse {
@@ -88,6 +115,7 @@ export interface SearchRecommendationsRequest {
   text: string;
   interests: string[];
   city: string;
+  cityId?: string;
   limit?: number;
 }
 /** Exact matches come first, then broader matches. Each says why it matched. */
@@ -302,11 +330,24 @@ export interface PlaceJournalResponse {
  * this so a call like callApi('savePlace', {...}) is type-checked end to end.
  */
 export interface ApiContract {
-  removeSavedRecommendation: { request: RemoveSavedRecommendationRequest; response: SavePlaceResponse };
-  searchCities: { request: SearchCitiesRequest; response: SearchCitiesResponse };
-  ensureProfile: { request: EnsureProfileRequest; response: EnsureProfileResponse };
+  removeSavedRecommendation: {
+    request: RemoveSavedRecommendationRequest;
+    response: SavePlaceResponse;
+  };
+  searchCities: {
+    request: SearchCitiesRequest;
+    response: SearchCitiesResponse;
+  };
+  ensureProfile: {
+    request: EnsureProfileRequest;
+    response: EnsureProfileResponse;
+  };
   getProfile: { request: GetProfileRequest; response: GetProfileResponse };
-  updateProfile: { request: UpdateProfileRequest; response: UpdateProfileResponse };
+  updateProfile: {
+    request: UpdateProfileRequest;
+    response: UpdateProfileResponse;
+  };
+  resolveCity: { request: ResolveCityRequest; response: ResolveCityResponse };
   listPlaces: { request: ListPlacesRequest; response: ListPlacesResponse };
   getPlace: { request: GetPlaceRequest; response: GetPlaceResponse };
   getFeed: { request: GetFeedRequest; response: GetFeedResponse };
@@ -319,28 +360,70 @@ export interface ApiContract {
     response: CreateRecommendationResponse;
   };
   savePlace: { request: SavePlaceRequest; response: SavePlaceResponse };
-  listSavedPlaces: { request: ListSavedPlacesRequest; response: ListSavedPlacesResponse };
-  updateSavedNote: { request: UpdateSavedNoteRequest; response: UpdateSavedNoteResponse };
-  removeSavedPlace: { request: RemoveSavedPlaceRequest; response: RemoveSavedPlaceResponse };
+  listSavedPlaces: {
+    request: ListSavedPlacesRequest;
+    response: ListSavedPlacesResponse;
+  };
+  updateSavedNote: {
+    request: UpdateSavedNoteRequest;
+    response: UpdateSavedNoteResponse;
+  };
+  removeSavedPlace: {
+    request: RemoveSavedPlaceRequest;
+    response: RemoveSavedPlaceResponse;
+  };
   createTrip: { request: CreateTripRequest; response: CreateTripResponse };
   listTrips: { request: ListTripsRequest; response: ListTripsResponse };
   getTrip: { request: GetTripRequest; response: GetTripResponse };
   deleteTrip: { request: DeleteTripRequest; response: { deleted: true } };
-  addCandidate: { request: AddCandidateRequest; response: AddCandidateResponse };
-  removeCandidate: { request: RemoveCandidateRequest; response: RemoveCandidateResponse };
+  addCandidate: {
+    request: AddCandidateRequest;
+    response: AddCandidateResponse;
+  };
+  removeCandidate: {
+    request: RemoveCandidateRequest;
+    response: RemoveCandidateResponse;
+  };
   addStop: { request: AddStopRequest; response: AddStopResponse };
-  addFixedActivity: { request: AddFixedActivityRequest; response: AddStopResponse };
+  addFixedActivity: {
+    request: AddFixedActivityRequest;
+    response: AddStopResponse;
+  };
   applyItinerary: { request: ApplyItineraryRequest; response: AddStopResponse };
   moveStop: { request: MoveStopRequest; response: MoveStopResponse };
   removeStop: { request: RemoveStopRequest; response: RemoveStopResponse };
-  updateStopTime: { request: UpdateStopTimeRequest; response: UpdateStopTimeResponse };
-  updateStopDetails: { request: UpdateStopDetailsRequest; response: AddStopResponse };
-  listPreparation: { request: StopPreparationRequest; response: { tasks: PreparationTask[] } };
-  savePreparation: { request: SavePreparationRequest; response: { task: PreparationTask } };
-  removePreparation: { request: StopPreparationRequest & { taskId: string }; response: { deleted: true } };
-  getPlaceJournal: { request: Record<string, never>; response: PlaceJournalResponse };
-  markVisited: { request: { placeId: PlaceId; visitDate: string }; response: { visit: Visit } };
-  saveRanking: { request: { category: string; placeIds: PlaceId[] }; response: PlaceJournalResponse };
+  updateStopTime: {
+    request: UpdateStopTimeRequest;
+    response: UpdateStopTimeResponse;
+  };
+  updateStopDetails: {
+    request: UpdateStopDetailsRequest;
+    response: AddStopResponse;
+  };
+  listPreparation: {
+    request: StopPreparationRequest;
+    response: { tasks: PreparationTask[] };
+  };
+  savePreparation: {
+    request: SavePreparationRequest;
+    response: { task: PreparationTask };
+  };
+  removePreparation: {
+    request: StopPreparationRequest & { taskId: string };
+    response: { deleted: true };
+  };
+  getPlaceJournal: {
+    request: Record<string, never>;
+    response: PlaceJournalResponse;
+  };
+  markVisited: {
+    request: { placeId: PlaceId; visitDate: string };
+    response: { visit: Visit };
+  };
+  saveRanking: {
+    request: { category: string; placeIds: PlaceId[] };
+    response: PlaceJournalResponse;
+  };
 }
 
 export type ApiFunctionName = keyof ApiContract;

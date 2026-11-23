@@ -30,8 +30,7 @@ export function useCity() {
 export const cityLabel = (city: CityLocation) =>
   [...new Set([city.name, city.region, city.country].filter(Boolean))].join(', ');
 
-// The existing catalog is keyed by city name. Avoid mixing distant namesakes
-// until the team's place provider supports canonical city IDs.
+// Match geocoder candidates and legacy places without mixing distant namesakes.
 export function nearCity(place: { latitude: number; longitude: number }, city: CityLocation) {
   const radians = Math.PI / 180;
   const dLat = (place.latitude - city.latitude) * radians;

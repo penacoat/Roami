@@ -7,6 +7,9 @@ import {
 } from "../../mobile/src/services/SearchService";
 import { buildSeedRecords } from "../src/scripts/seed";
 
+// Search uses repository fixtures here; importing the city service must not
+// initialize the native Firebase app in this Node test.
+jest.mock("../../mobile/src/repositories/firestore", () => ({ db: {} }));
 jest.mock("../../mobile/src/repositories/PlaceRepository", () => ({
   listPlacesInCity: jest.fn(),
 }));

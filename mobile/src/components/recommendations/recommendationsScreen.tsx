@@ -26,24 +26,29 @@ export function RecommendationsScreen({
   const { city, setCity } = useCity();
   const [items, setRecommendations] = useState<RecommendationView[]>([]);
   const [itemsCity, setItemsCity] = useState('');
-  const recommendations = itemsCity === city.id ? items : [];
+  const cityKey = `${city.id}:${city.cityId ?? ''}`;
+  const recommendations = itemsCity === cityKey ? items : [];
   const [loadedKey, setLoadedKey] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
 
-  const loadKey = `${city.id}:${refresh}`;
+  const loadKey = `${cityKey}:${refresh}`;
   const loading = loadedKey !== loadKey;
 
   useEffect(() => {
     let active = true;
-    callApi('getFeed', { city: city.name })
+    callApi('getFeed', { city: city.name, ...(city.cityId && { cityId: city.cityId }) })
       .then(({ items }) => {
         if (active) {
           setRecommendations(
-            items.filter((item) => item.status === 'available' && nearCity(item.place, city)),
+            items.filter(
+              (item) =>
+                item.status === 'available' &&
+                ((city.cityId && item.place.cityId === city.cityId) || nearCity(item.place, city)),
+            ),
           );
-          setItemsCity(city.id);
+          setItemsCity(cityKey);
           setError('');
         }
       })
@@ -59,7 +64,7 @@ export function RecommendationsScreen({
     return () => {
       active = false;
     };
-  }, [loadKey, city]);
+  }, [loadKey, city, cityKey]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
