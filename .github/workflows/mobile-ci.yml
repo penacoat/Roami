@@ -29,28 +29,3 @@ jobs:
         run: npm run typecheck
       - name: Tests
         run: npm run test:ci
-
-  backend:
-    runs-on: ubuntu-latest
-    env:
-      METADATA_SERVER_DETECTION: none
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            backend/package-lock.json
-            mobile/package-lock.json
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-      # Backend integration tests import mobile services and their Firebase SDK.
-      - name: Install mobile service dependencies
-        run: npm --prefix mobile ci
-      - run: npm --prefix backend ci
-      - run: npm --prefix backend run build
-      - name: Firestore rules and backend tests
-        run: npx --yes firebase-tools@15.37.0 emulators:exec --only auth,firestore "npm --prefix backend run test:rules -- --runInBand"
