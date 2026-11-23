@@ -43,8 +43,8 @@ The new import still stores places in Firestore, so rules still matter. Recommen
 
 Use Node 24 in mobile. The ignored local environment selects the Auth/Firestore emulators; design review uses fixtures. Local records do not upload when changing API configuration. The demo has 50 Seattle places, 75 postcards, three saves + one trip. After reseeding, run `npm --prefix backend run seed:hours:local` for the three sourced hours examples. That script only patches loopback port 8080 and leaves users/saves/trips alone.
 
-Expo CLI is signed in as neeyuh. Use the same account in Expo Go. LAN address: `exp://192.168.1.71:8087` (changes with networks). Auth is on 9099; Firestore on 8080. Metro uses CI=1 because file watching exceeds this host's limit; restart after source edits. Keep local environment files, emulator data + temporary QR images out of git. Local auth starts with a fresh sign-in after a full reload; production sessions retain normal persistence.
+Expo CLI is signed in as neeyuh. Use the same account in Expo Go. LAN address: `exp://192.168.1.71:8089` (changes with networks). Auth is on 9099; Firestore on 8080. Metro uses CI=1 because file watching exceeds this host's limit; restart after source edits. Keep local environment files, emulator data + temporary QR images out of git. Local auth starts with a fresh sign-in after a full reload; production sessions retain normal persistence.
 
 ## push scope
 
-The user authorized a feature-branch push after these fixes on November 22. No merge or deployment is requested. The branch is based on the team's a93a067 snapshot; the newer city import still needs integration before merge.
+Pushed the feature branch on November 22 after the map/search fixes and checks. Code commit: 6994698. No merge or deployment is requested. The branch is based on the team's a93a067 snapshot; the newer city import still needs integration before merge.
