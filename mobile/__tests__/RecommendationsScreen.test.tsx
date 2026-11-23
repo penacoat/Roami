@@ -26,7 +26,7 @@ it('flips the existing postcard and opens its actual catalog place', async () =>
   await fireEvent.press(screen.getByLabelText('Read postcard for Jazz Alley by Maya'));
   await screen.findByLabelText('Show photo for Jazz Alley by Maya');
   await fireEvent.press(screen.getByLabelText('See place: Jazz Alley, recommended by Maya'));
-  expect(open).toHaveBeenCalledWith('p-jazz');
+  expect(open).toHaveBeenCalledWith('p-jazz', 'r1');
 });
 
 it('shows a feed failure and recovers through retry', async () => {

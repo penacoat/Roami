@@ -7,7 +7,7 @@ import { PLACE_PHOTOS } from './placePhotos';
 
 interface Props {
   recommendation: RecommendationView;
-  onOpenPlace: (placeId: string) => void;
+  onOpenPlace: (placeId: string, recommendationId: string) => void;
 }
 
 //colors athena used
@@ -125,7 +125,7 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`See place: ${recommendation.place.name}, recommended by ${name}`}
-        onPress={() => onOpenPlace(recommendation.place.id)}
+        onPress={() => onOpenPlace(recommendation.place.id, recommendation.id)}
         style={styles.footer}
       >
         <Text style={styles.placeName}>{recommendation.place.name}</Text>

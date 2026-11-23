@@ -23,10 +23,12 @@ import { TimeRangePicker } from '../trips/TimeRangePicker';
 
 export function AddToItinerary({
   place,
+  recommendationIds = [],
   target,
   onChanged,
 }: {
   place: PlaceSummary;
+  recommendationIds?: string[];
   target?: { tripId: string; day: number };
   onChanged?: (trip: TripView) => void;
 }) {
@@ -73,6 +75,11 @@ export function AddToItinerary({
   const existing = selected?.stops.find((stop) => stop.placeId === place.id);
   const duplicate = Boolean(existing);
   const suggested = selected?.candidates.some((item) => item.id === place.id);
+  const suggestionSaved =
+    suggested &&
+    recommendationIds.every((id) =>
+      selected?.trip.candidateRecommendationIds?.[place.id]?.includes(id),
+    );
   const full = stops.length >= MAX_STOPS_PER_DAY;
   const draftTime = timed ? rangeFromMinutes(start, end) : null;
 
@@ -96,7 +103,11 @@ export function AddToItinerary({
     setPending(true);
     setError('');
     try {
-      const selection = { tripId: selected.trip.id, placeId: place.id };
+      const selection = {
+        tripId: selected.trip.id,
+        placeId: place.id,
+        recommendationIds: [...new Set(recommendationIds)],
+      };
       const result = times
         ? await callApi('addStop', {
             ...selection,
@@ -332,13 +343,17 @@ export function AddToItinerary({
                 {!duplicate && (
                   <Pressable
                     accessibilityRole="button"
-                    disabled={pending || suggested}
-                    accessibilityState={{ disabled: pending || suggested }}
+                    disabled={pending || suggestionSaved}
+                    accessibilityState={{ disabled: pending || suggestionSaved }}
                     onPress={() => void add('candidate')}
-                    style={[styles.button, (pending || suggested) && styles.disabled]}
+                    style={[styles.button, (pending || suggestionSaved) && styles.disabled]}
                   >
                     <Text style={styles.buttonText}>
-                      {suggested ? 'Already a trip suggestion' : 'Save as a trip suggestion'}
+                      {suggestionSaved
+                        ? 'Already a trip suggestion'
+                        : suggested
+                          ? 'Keep this tip with the suggestion'
+                          : 'Save as a trip suggestion'}
                     </Text>
                   </Pressable>
                 )}

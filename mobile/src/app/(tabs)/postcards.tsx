@@ -4,7 +4,9 @@ import { RecommendationsScreen } from '../../components/recommendations/recommen
 export default function PostcardsRoute() {
   return (
     <RecommendationsScreen
-      onOpenPlace={(placeId) => router.navigate({ pathname: '/', params: { placeId } })}
+      onOpenPlace={(placeId, recommendationId) =>
+        router.navigate({ pathname: '/', params: { placeId, recommendationId } })
+      }
     />
   );
 }

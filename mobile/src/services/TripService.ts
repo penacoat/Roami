@@ -19,7 +19,7 @@ import type {
 
 import { ApiError } from '../api';
 import { getCurrentUserId } from '../auth/AuthService';
-import { MAX_CANDIDATES, validateNewTrip } from '../logic/trips';
+import { MAX_CANDIDATES, validateNewTrip, validateStopDetails } from '../logic/trips';
 import { getPlacesByIds } from '../repositories/PlaceRepository';
 import {
   createTrip as saveNewTrip,
@@ -198,14 +198,29 @@ export async function addCandidate(request: AddCandidateRequest): Promise<AddCan
   const tripId = requireTripId(request.tripId);
   const placeId = requirePlaceId(request.placeId);
   const trip = await changeCandidates(tripId, async (current, placeExists) => {
-    if (current.candidatePlaceIds.includes(placeId)) return null; // already there; save nothing
-    if (current.candidatePlaceIds.length >= MAX_CANDIDATES) {
+    const previous = current.candidateRecommendationIds?.[placeId] ?? [];
+    const recommendationIds = [...new Set([...previous, ...(request.recommendationIds ?? [])])];
+    const details = validateStopDetails({ visitMinutes: 60, recommendationIds });
+    if (!details.ok) throw new ApiError('invalid-argument', details.error);
+    const exists = current.candidatePlaceIds.includes(placeId);
+    if (exists && recommendationIds.length === previous.length) return null;
+    if (!exists && current.candidatePlaceIds.length >= MAX_CANDIDATES) {
       throw new ApiError('invalid-argument', `A trip can have at most ${MAX_CANDIDATES} places.`);
     }
     if (!(await placeExists(placeId))) {
       throw new ApiError('not-found', 'That place is not in the catalog.');
     }
-    return nextRevision(current, { candidatePlaceIds: [...current.candidatePlaceIds, placeId] });
+    return nextRevision(current, {
+      candidatePlaceIds: exists
+        ? current.candidatePlaceIds
+        : [...current.candidatePlaceIds, placeId],
+      ...(recommendationIds.length > 0 && {
+        candidateRecommendationIds: {
+          ...current.candidateRecommendationIds,
+          [placeId]: recommendationIds,
+        },
+      }),
+    });
   });
   return { trip };
 }
@@ -219,6 +234,11 @@ export async function removeCandidate(
     if (!current.candidatePlaceIds.includes(placeId)) return null; // not there; save nothing
     return nextRevision(current, {
       candidatePlaceIds: current.candidatePlaceIds.filter((id) => id !== placeId),
+      ...(current.candidateRecommendationIds && {
+        candidateRecommendationIds: Object.fromEntries(
+          Object.entries(current.candidateRecommendationIds).filter(([id]) => id !== placeId),
+        ),
+      }),
     });
   });
   return { trip };

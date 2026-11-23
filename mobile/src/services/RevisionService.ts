@@ -113,7 +113,12 @@ export async function addStop(request: AddStopRequest): Promise<AddStopResponse>
         tripId: current.id,
         placeId,
         title: null,
-        recommendationIds: [...new Set(recommendationIds)],
+        recommendationIds: [
+          ...new Set([
+            ...(current.candidateRecommendationIds?.[placeId] ?? []),
+            ...recommendationIds,
+          ]),
+        ],
         day: plan.position.day,
         order: plan.position.order,
         startTime,
@@ -124,6 +129,7 @@ export async function addStop(request: AddStopRequest): Promise<AddStopResponse>
         warnings: [],
       };
       unwrap(validateActivityOverlap(stops, newStop));
+      unwrap(validateStopDetails(newStop));
       return { stopsToSave: [newStop, ...applyPositions(stops, plan.moved)] };
     },
   );

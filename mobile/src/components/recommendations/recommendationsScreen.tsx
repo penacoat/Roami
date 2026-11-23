@@ -6,7 +6,11 @@ import { callApi } from '../../api';
 import { buttonOutline } from '../buttonStyles';
 import { PostcardRecommendation } from './postcardRecommendation';
 
-export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: string) => void }) {
+export function RecommendationsScreen({
+  onOpenPlace,
+}: {
+  onOpenPlace: (placeId: string, recommendationId: string) => void;
+}) {
   const [recommendations, setRecommendations] = useState<RecommendationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,8 +37,9 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>
-          Postcards from Seattle
+          Postcards
         </Text>
+        <Text style={styles.city}>Seattle</Text>
         <Pressable
           accessibilityRole="button"
           disabled={loading}
@@ -66,7 +71,7 @@ export function RecommendationsScreen({ onOpenPlace }: { onOpenPlace: (placeId: 
 }
 
 //title for screen
-const SCRIPT = Platform.select({ ios: 'Snell Roundhand', android: 'serif', default: 'serif' });
+const SCRIPT = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
 const styles = StyleSheet.create({
   screen: {
@@ -77,11 +82,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   title: {
-    fontSize: 40,
+    fontSize: 32,
     fontFamily: SCRIPT,
     color: '#283A70',
-    marginBottom: 16,
+    marginBottom: 6,
   },
+  city: { color: '#505A72', fontSize: 14, marginBottom: 16 },
   notice: { color: '#505A72', fontSize: 13, lineHeight: 20 },
   refresh: {
     ...buttonOutline,

@@ -304,6 +304,30 @@ const trip = (uid: string, id: string, revision: number) => ({
   candidatePlaceIds: [] as string[], revision, createdAt: now, updatedAt: now,
 });
 
+describe("trip suggestion recommendation sources", () => {
+  it("allows the owner to retain sources for a trip suggestion", async () => {
+    await assertSucceeds(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidatePlaceIds: ["p1"],
+      candidateRecommendationIds: {p1: ["r1", "r2"]},
+    }));
+    await assertFails(getDoc(doc(as("bob"), "trips/sources")));
+    await assertFails(updateDoc(doc(as("bob"), "trips/sources"), {
+      revision: 2, candidateRecommendationIds: {p1: ["r3"]},
+    }));
+  });
+  it("rejects sources for a place that is not a trip suggestion", async () => {
+    await assertFails(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidatePlaceIds: ["p1"],
+      candidateRecommendationIds: {p2: ["r1"]},
+    }));
+  });
+  it("requires the optional source collection to be a map", async () => {
+    await assertFails(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidateRecommendationIds: ["r1"],
+    }));
+  });
+});
+
 const stop = (id: string, tripId: string, placeId: string | null) => ({
   id, tripId, placeId, title: placeId ? null : "Dinner reservation",
   recommendationIds: [] as string[], day: 1, order: 1, startTime: null,

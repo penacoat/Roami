@@ -47,7 +47,7 @@ export function ItineraryScreen({
   tripId: string;
   onBack: () => void;
   onExplore: () => void;
-  onOpenPlace: (placeId: string) => void;
+  onOpenPlace: (placeId: string, recommendationId?: string) => void;
 }) {
   const [view, setView] = useState<TripView | null>(null);
   const [loadedKey, setLoadedKey] = useState('');
@@ -570,7 +570,7 @@ export function ItineraryScreen({
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Open ${stop.place.name}`}
-                            onPress={() => onOpenPlace(stop.place!.id)}
+                            onPress={() => onOpenPlace(stop.place!.id, stop.recommendationIds[0])}
                           >
                             <Text style={styles.text}>
                               {stop.order}. {stop.place.name}

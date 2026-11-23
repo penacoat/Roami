@@ -19,6 +19,7 @@ import { colors } from './theme';
 
 interface Props {
   place: PlaceSummary;
+  highlightedRecommendationId?: string;
   saved: SavedPlaceView | undefined;
   pending: string;
   notice: string;
@@ -31,6 +32,7 @@ interface Props {
 /** Mount with key={place.id}; old requests cannot overwrite another place's details. */
 export function PlaceDetails({
   place,
+  highlightedRecommendationId,
   saved,
   pending,
   notice,
@@ -44,6 +46,13 @@ export function PlaceDetails({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [linkError, setLinkError] = useState('');
+  const highlighted = recommendations.find((item) => item.id === highlightedRecommendationId);
+  const recommendationIds = [
+    ...new Set([
+      ...(saved?.recommendations.map((item) => item.id) ?? []),
+      ...(highlighted ? [highlighted.id] : []),
+    ]),
+  ];
   const sampleData = getApiMode() === 'fixtures' || Boolean(process.env.EXPO_PUBLIC_EMULATOR_HOST);
   const sourceLinks = [
     ...new Set(
@@ -86,27 +95,32 @@ export function PlaceDetails({
 
   return (
     <View style={styles.sheet}>
-      <View style={styles.heading}>
-        <View style={styles.titleGroup}>
-          <Text style={styles.eyebrow}>{place.category.toUpperCase()}</Text>
-          <Text accessibilityRole="header" style={styles.title}>
-            {place.name}
-          </Text>
-        </View>
+      <View style={styles.toolbar}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close place details"
           onPress={onClose}
           style={styles.close}
         >
-          <Text style={styles.link}>← Places</Text>
+          <Text style={styles.link}>← Back to places</Text>
         </Pressable>
       </View>
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
+        <Text style={styles.eyebrow}>{place.category.toUpperCase()}</Text>
+        <Text accessibilityRole="header" style={styles.title}>
+          {place.name}
+        </Text>
+        {highlighted && renderRecommendation(highlighted, true)}
+        {highlightedRecommendationId && !loading && !error && !highlighted && (
+          <Text accessibilityRole="alert" style={styles.notice}>
+            The original recommendation is no longer available. You can still save this place.
+          </Text>
+        )}
         <Text style={styles.hours}>
           {sampleData
             ? 'Hours not verified'
@@ -114,21 +128,6 @@ export function PlaceDetails({
               ? `Reported hours · ${place.openingHours}`
               : 'Hours not provided'}
         </Text>
-        {sourceLinks.map(({ url, host }) => (
-          <Pressable
-            key={url}
-            accessibilityRole="link"
-            accessibilityLabel={`Open source: ${host}`}
-            style={styles.retry}
-            onPress={() =>
-              void Linking.openURL(url).catch(() =>
-                setLinkError('Could not open the link. Try again.'),
-              )
-            }
-          >
-            <Text style={styles.link}>Source · {host} ↗</Text>
-          </Pressable>
-        ))}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={saved ? 'Unsave place' : 'Save place'}
@@ -144,7 +143,9 @@ export function PlaceDetails({
             {pending || (saved ? 'Saved ✓ · Unsave' : 'Save place')}
           </Text>
         </Pressable>
-        <AddToItinerary place={place} />
+        {(!highlightedRecommendationId || (!loading && !error)) && (
+          <AddToItinerary place={place} recommendationIds={recommendationIds} />
+        )}
         <VisitPlace place={place} />
         {notice !== '' && (
           <Text
@@ -179,44 +180,28 @@ export function PlaceDetails({
         {!loading && error === '' && recommendations.length === 0 && (
           <Text style={styles.hours}>No recommendations yet.</Text>
         )}
-        {recommendations.map((recommendation) => (
-          <View key={recommendation.id} style={styles.postcard}>
-            {recommendation.status === 'unavailable' ? (
-              <Text style={styles.hours}>This recommendation is no longer available.</Text>
-            ) : (
-              <>
-                <Text style={styles.author}>
-                  {sampleData ? 'Sample recommendation ·' : 'Recommended by'}{' '}
-                  {recommendation.author?.name ?? 'a traveler'}
-                </Text>
-                <Text style={styles.description}>{recommendation.description}</Text>
-                {recommendation.tags.length > 0 && (
-                  <Text style={styles.tags}>{recommendation.tags.join(' · ')}</Text>
-                )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Save recommendation by ${recommendation.author?.name ?? 'a traveler'}`}
-                  accessibilityState={{
-                    disabled:
-                      Boolean(pending) ||
-                      saved?.recommendations.some((item) => item.id === recommendation.id) === true,
-                  }}
-                  disabled={
-                    Boolean(pending) ||
-                    saved?.recommendations.some((item) => item.id === recommendation.id)
-                  }
-                  onPress={() => onSave(recommendation.id)}
-                  style={styles.retry}
-                >
-                  <Text style={styles.link}>
-                    {saved?.recommendations.some((item) => item.id === recommendation.id)
-                      ? 'Recommendation saved ✓'
-                      : 'Save recommendation'}
-                  </Text>
-                </Pressable>
-              </>
-            )}
-          </View>
+        {recommendations
+          .filter((item) => item.id !== highlighted?.id)
+          .map((item) => renderRecommendation(item))}
+        {sourceLinks.length > 0 && (
+          <Text accessibilityRole="header" style={styles.author}>
+            Sources
+          </Text>
+        )}
+        {sourceLinks.map(({ url, host }) => (
+          <Pressable
+            key={url}
+            accessibilityRole="link"
+            accessibilityLabel={`Open source: ${host}`}
+            style={styles.retry}
+            onPress={() =>
+              void Linking.openURL(url).catch(() =>
+                setLinkError('Could not open the link. Try again.'),
+              )
+            }
+          >
+            <Text style={styles.link}>Source · {host} ↗</Text>
+          </Pressable>
         ))}
         {linkError !== '' && (
           <Text accessibilityRole="alert" style={styles.notice}>
@@ -226,6 +211,53 @@ export function PlaceDetails({
       </ScrollView>
     </View>
   );
+
+  function renderRecommendation(recommendation: RecommendationView, focused = false) {
+    return (
+      <View key={recommendation.id} style={[styles.postcard, focused && styles.highlighted]}>
+        {focused && (
+          <Text accessibilityRole="header" style={styles.author}>
+            Selected recommendation
+          </Text>
+        )}
+        {recommendation.status === 'unavailable' ? (
+          <Text style={styles.hours}>This recommendation is no longer available.</Text>
+        ) : (
+          <>
+            <Text style={styles.author}>
+              {sampleData ? 'Sample recommendation ·' : 'Recommended by'}{' '}
+              {recommendation.author?.name ?? 'a traveler'}
+            </Text>
+            <Text style={styles.description}>{recommendation.description}</Text>
+            {recommendation.tags.length > 0 && (
+              <Text style={styles.tags}>{recommendation.tags.join(' · ')}</Text>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Save recommendation by ${recommendation.author?.name ?? 'a traveler'}`}
+              accessibilityState={{
+                disabled:
+                  Boolean(pending) ||
+                  saved?.recommendations.some((item) => item.id === recommendation.id) === true,
+              }}
+              disabled={
+                Boolean(pending) ||
+                saved?.recommendations.some((item) => item.id === recommendation.id)
+              }
+              onPress={() => onSave(recommendation.id)}
+              style={styles.retry}
+            >
+              <Text style={styles.link}>
+                {saved?.recommendations.some((item) => item.id === recommendation.id)
+                  ? 'Place + tip saved ✓'
+                  : 'Save place + this tip'}
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -235,8 +267,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingTop: 4,
   },
-  heading: { flexDirection: 'row', paddingHorizontal: 20, alignItems: 'flex-start', gap: 10 },
-  titleGroup: { flex: 1 },
+  toolbar: { paddingHorizontal: 16, paddingBottom: 4, alignItems: 'flex-start' },
   eyebrow: {
     color: colors.gold,
     fontSize: 10,
@@ -257,8 +288,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  body: { flexShrink: 1 },
-  bodyContent: { padding: 20, paddingTop: 10, gap: 12 },
+  body: { flex: 1, minHeight: 0 },
+  bodyContent: { padding: 16, paddingTop: 10, paddingBottom: 24, gap: 12 },
   hours: { color: colors.muted, fontSize: 13, lineHeight: 20 },
   save: {
     ...buttonOutline,
@@ -278,6 +309,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
+  highlighted: { borderWidth: 2, borderColor: colors.primary, backgroundColor: '#ECEFF7' },
   author: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   description: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   tags: { color: colors.muted, fontSize: 12 },

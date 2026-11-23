@@ -411,11 +411,25 @@ const tripHandlers: Pick<
     await delay();
     const record = getTripRecord(request.tripId);
     getPlace(request.placeId);
-    if (!record.trip.candidatePlaceIds.includes(request.placeId)) {
-      if (record.trip.candidatePlaceIds.length >= MAX_CANDIDATES) {
+    const previous = record.trip.candidateRecommendationIds?.[request.placeId] ?? [];
+    const recommendationIds = [...new Set([...previous, ...(request.recommendationIds ?? [])])];
+    unwrap(validateStopDetails({ visitMinutes: 60, recommendationIds }));
+    const exists = record.trip.candidatePlaceIds.includes(request.placeId);
+    if (!exists || recommendationIds.length !== previous.length) {
+      if (!exists && record.trip.candidatePlaceIds.length >= MAX_CANDIDATES) {
         throw new ApiError('invalid-argument', `A trip can have at most ${MAX_CANDIDATES} places.`);
       }
-      commit(record, { candidatePlaceIds: [...record.trip.candidatePlaceIds, request.placeId] });
+      commit(record, {
+        candidatePlaceIds: exists
+          ? record.trip.candidatePlaceIds
+          : [...record.trip.candidatePlaceIds, request.placeId],
+        ...(recommendationIds.length > 0 && {
+          candidateRecommendationIds: {
+            ...record.trip.candidateRecommendationIds,
+            [request.placeId]: recommendationIds,
+          },
+        }),
+      });
     }
     return clone({ trip: tripView(record) });
   },
@@ -426,6 +440,13 @@ const tripHandlers: Pick<
     if (record.trip.candidatePlaceIds.includes(request.placeId)) {
       commit(record, {
         candidatePlaceIds: record.trip.candidatePlaceIds.filter((id) => id !== request.placeId),
+        ...(record.trip.candidateRecommendationIds && {
+          candidateRecommendationIds: Object.fromEntries(
+            Object.entries(record.trip.candidateRecommendationIds).filter(
+              ([id]) => id !== request.placeId,
+            ),
+          ),
+        }),
       });
     }
     return clone({ trip: tripView(record) });
@@ -451,7 +472,12 @@ const tripHandlers: Pick<
       tripId: record.trip.id,
       placeId: request.placeId,
       title: null,
-      recommendationIds: [...new Set(request.recommendationIds ?? [])],
+      recommendationIds: [
+        ...new Set([
+          ...(record.trip.candidateRecommendationIds?.[request.placeId] ?? []),
+          ...(request.recommendationIds ?? []),
+        ]),
+      ],
       startTime,
       visitMinutes: request.visitMinutes,
       walkingMinutesFromPrevious: null,
@@ -460,6 +486,7 @@ const tripHandlers: Pick<
       warnings: [],
     };
     unwrap(validateActivityOverlap(record.stops, stop));
+    unwrap(validateStopDetails(stop));
     saveStops(record, [stop, ...applyPositions(record.stops, moved)]);
     return clone({ trip: tripView(record) });
   },

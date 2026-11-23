@@ -172,6 +172,7 @@ export interface DeleteTripRequest {
 export interface AddCandidateRequest {
   tripId: TripId;
   placeId: PlaceId;
+  recommendationIds?: RecommendationId[];
 }
 export interface AddCandidateResponse {
   trip: TripView;

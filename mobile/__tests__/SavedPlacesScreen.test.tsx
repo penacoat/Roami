@@ -8,12 +8,34 @@ import { notifySavedPlacesChanged } from '../src/hooks/useSavedPlacesChanges';
 
 jest.mock(
   'react-native-safe-area-context',
-  () => require('react-native-safe-area-context/jest/mock').default,
+  () =>
+    jest.requireActual<{ default: unknown }>('react-native-safe-area-context/jest/mock').default,
 );
 
 beforeEach(() => {
   jest.restoreAllMocks();
   resetFixtures();
+});
+
+it('keeps saved recommendations attached when the place is added to an itinerary', async () => {
+  await api.callApi('savePlace', { placeId: 'p-jazz', recommendationId: 'r1' });
+  const { trip } = await api.callApi('createTrip', {
+    city: 'Seattle',
+    startDate: '2026-11-23',
+    endDate: '2026-11-24',
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  await render(<SavedPlacesScreen refreshKey={1} onExplore={jest.fn()} onOpenPlace={jest.fn()} />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Add Jazz Alley to an itinerary' }),
+  );
+  await fireEvent.press(await screen.findByRole('button', { name: /Seattle/ }));
+  await screen.findByText('Choose a day', {}, { timeout: 3000 });
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle · Day 1');
+  expect(
+    (await api.callApi('getTrip', { tripId: trip.trip.id })).trip.stops[0].recommendationIds,
+  ).toEqual(['r1']);
 });
 
 it('loads saved places through the API, opens details, and removes the save', async () => {

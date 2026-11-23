@@ -112,7 +112,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          {onBack ? (
+          {onBack && (
             <Pressable
               accessibilityRole="button"
               onPress={onBack}
@@ -121,15 +121,10 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
             >
               <Text style={styles.signOutText}>← Itineraries</Text>
             </Pressable>
-          ) : (
-            <View style={styles.wordmark}>
-              <View accessible={false} style={styles.globe}>
-                <View style={styles.globeMeridian} />
-                <View style={styles.globeEquator} />
-              </View>
-              <Text style={styles.brand}>ROAMI</Text>
-            </View>
           )}
+          <Text accessibilityRole="header" style={styles.topTitle}>
+            New itinerary
+          </Text>
           <Pressable
             accessibilityRole="button"
             onPress={handleSignOut}
@@ -334,6 +329,7 @@ export function TripCreationScreen({ onSignOut, onCreated, onBack }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: theme.paper },
+  topTitle: { flex: 1, color: theme.ink, fontSize: 18, fontWeight: '600' },
   header: {
     width: '100%',
     maxWidth: 600,

@@ -145,6 +145,7 @@ export interface Trip {
   dailyWindow: { start: string; end: string }; // "09:00" to "21:00"
   startingPoints: StartingPoint[];
   candidatePlaceIds: PlaceId[]; // candidates are not scheduled until they become stops
+  candidateRecommendationIds?: Record<PlaceId, RecommendationId[]>; // sources retained through planning
   revision: number; // increases on every saved change, to detect outdated edits
   createdAt: string;
   updatedAt: string;

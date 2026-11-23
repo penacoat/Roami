@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { TripView } from '@roami/shared';
 
 import { ApiError } from '../src/api';
-import { addStop, moveStop, removeStop, updateStopTime } from '../src/services/RevisionService';
+import {
+  addStop,
+  applyItinerary,
+  moveStop,
+  removeStop,
+  updateStopTime,
+} from '../src/services/RevisionService';
 import {
   addCandidate,
   createTrip,
@@ -55,6 +61,56 @@ async function aliceTrip(): Promise<TripView> {
 beforeEach(() => {
   fake.reset();
   for (let i = 1; i <= 7; i += 1) fake.seed(`places/p${i}`, place(`p${i}`, `Place ${i}`));
+});
+
+it('retains merged recommendation sources through suggestion storage and generated plans', async () => {
+  const view = await aliceTrip();
+  await addCandidate({ tripId: view.trip.id, placeId: 'p1', recommendationIds: ['r1'] });
+  await addCandidate({ tripId: view.trip.id, placeId: 'p1', recommendationIds: ['r1', 'r2'] });
+  const loaded = (await getTrip({ tripId: view.trip.id })).trip;
+  expect(loaded.trip.candidateRecommendationIds).toEqual({ p1: ['r1', 'r2'] });
+  const { trip: planned } = await applyItinerary({
+    tripId: view.trip.id,
+    expectedRevision: loaded.trip.revision,
+    placeIds: ['p1'],
+    strategy: 'earlier',
+  });
+  expect(planned.stops[0].recommendationIds).toEqual(['r1', 'r2']);
+  await removeCandidate({ tripId: view.trip.id, placeId: 'p1' });
+  const after = (await getTrip({ tripId: view.trip.id })).trip;
+  expect(after.trip.candidateRecommendationIds).toEqual({});
+  expect(after.stops[0].recommendationIds).toEqual(['r1', 'r2']);
+});
+
+it('combines candidate and current sources when adding a day stop manually', async () => {
+  const view = await aliceTrip();
+  const candidate = await addCandidate({
+    tripId: view.trip.id,
+    placeId: 'p1',
+    recommendationIds: ['r1'],
+  });
+  const { trip } = await addStop({
+    tripId: view.trip.id,
+    expectedRevision: candidate.trip.trip.revision,
+    placeId: 'p1',
+    recommendationIds: ['r2', 'r1'],
+    day: 1,
+    visitMinutes: 60,
+  });
+  expect(trip.stops[0].recommendationIds).toEqual(['r1', 'r2']);
+});
+
+it('refuses too many candidate sources without changing the stored trip', async () => {
+  const view = await aliceTrip();
+  await rejectsWith(
+    addCandidate({
+      tripId: view.trip.id,
+      placeId: 'p1',
+      recommendationIds: Array.from({ length: 26 }, (_, i) => `r${i}`),
+    }),
+    'invalid-argument',
+  );
+  expect((await getTrip({ tripId: view.trip.id })).trip.trip.revision).toBe(1);
 });
 
 describe('createTrip', () => {

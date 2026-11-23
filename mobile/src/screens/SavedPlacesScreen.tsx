@@ -108,7 +108,6 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.heading}>
-        <Text style={styles.brand}>ROAMI</Text>
         <Text accessibilityRole="header" style={styles.title}>
           Saved places
         </Text>
@@ -195,6 +194,9 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
               <View style={{ marginTop: 10 }}>
                 <AddToItinerary
                   place={item.place}
+                  recommendationIds={item.recommendations.map(
+                    (recommendation) => recommendation.id,
+                  )}
                   onChanged={() => setScheduleRefresh((value) => value + 1)}
                 />
               </View>
@@ -221,7 +223,6 @@ export function SavedPlacesScreen({ refreshKey, onOpenPlace, onExplore }: Props)
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
   heading: { paddingHorizontal: 20, paddingTop: 16 },
-  brand: { color: colors.primary, fontSize: 11, letterSpacing: 3, fontWeight: '700' },
   title: {
     color: colors.ink,
     fontSize: 32,

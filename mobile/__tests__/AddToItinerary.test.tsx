@@ -8,11 +8,14 @@ import { pickTime } from '../test-utils/timePicker';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@react-native-community/datetimepicker', () =>
-  require('../test-utils/timePicker').timePickerModule(),
+  jest
+    .requireActual<typeof import('../test-utils/timePicker')>('../test-utils/timePicker')
+    .timePickerModule(),
 );
 jest.mock(
   'react-native-safe-area-context',
-  () => require('react-native-safe-area-context/jest/mock').default,
+  () =>
+    jest.requireActual<{ default: unknown }>('react-native-safe-area-context/jest/mock').default,
 );
 
 beforeEach(() => {
@@ -31,9 +34,14 @@ async function create(city = 'Seattle') {
   ).trip;
 }
 
-async function choose(city: string) {
+async function choose(city: string, recommendationIds: string[] = []) {
   const { places } = await callApi('listPlaces', { city: 'Seattle' });
-  await render(<AddToItinerary place={places.find((place) => place.id === 'p-jazz')!} />);
+  await render(
+    <AddToItinerary
+      place={places.find((place) => place.id === 'p-jazz')!}
+      recommendationIds={recommendationIds}
+    />,
+  );
   await fireEvent.press(screen.getByRole('button', { name: 'Add Jazz Alley to an itinerary' }));
   await fireEvent.press(await screen.findByRole('button', { name: new RegExp(city) }));
   await screen.findByText('Choose a day');
@@ -142,10 +150,39 @@ it('explains how to create an itinerary when none exist', async () => {
 
 it('saves a selected place as a suggestion for generation', async () => {
   const trip = await create();
-  await choose('Seattle');
+  await choose('Seattle', ['r1']);
   await fireEvent.press(screen.getByRole('button', { name: 'Save as a trip suggestion' }));
   await screen.findByText('Saved as a suggestion for Seattle.');
   const { trip: saved } = await callApi('getTrip', { tripId: trip.trip.id });
   expect(saved.candidates.map((place) => place.id)).toEqual(['p-jazz']);
   expect(saved.stops).toHaveLength(0);
+  expect(saved.trip.candidateRecommendationIds).toEqual({ 'p-jazz': ['r1'] });
+  const { trip: generated } = await callApi('applyItinerary', {
+    tripId: saved.trip.id,
+    expectedRevision: saved.trip.revision,
+    placeIds: ['p-jazz'],
+    strategy: 'earlier',
+  });
+  expect(generated.stops[0].recommendationIds).toEqual(['r1']);
+});
+
+it('preserves and deduplicates recommendation sources when adding a scheduled stop', async () => {
+  const trip = await create();
+  const { places } = await callApi('listPlaces', { city: 'Seattle' });
+  await render(
+    <AddToItinerary
+      place={places.find((place) => place.id === 'p-jazz')!}
+      recommendationIds={['r1', 'r2', 'r1']}
+    />,
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Jazz Alley to an itinerary' }));
+  await fireEvent.press(await screen.findByRole('button', { name: /Seattle/ }));
+  await screen.findByText('Choose a day');
+  jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  await screen.findByText('Could not add this place. Try again.');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle · Day 1');
+  const saved = (await callApi('getTrip', { tripId: trip.trip.id })).trip;
+  expect(saved.stops[0].recommendationIds).toEqual(['r1', 'r2']);
 });

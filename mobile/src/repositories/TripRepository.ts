@@ -56,6 +56,16 @@ function toTrip(id: string, data: DocumentData): Trip {
     candidatePlaceIds: Array.isArray(data.candidatePlaceIds)
       ? data.candidatePlaceIds.map(String)
       : [],
+    ...(data.candidateRecommendationIds &&
+      typeof data.candidateRecommendationIds === 'object' && {
+        candidateRecommendationIds: Object.fromEntries(
+          Object.entries(data.candidateRecommendationIds).flatMap(([placeId, ids]) =>
+            Array.isArray(ids)
+              ? [[placeId, ids.filter((id): id is string => typeof id === 'string')]]
+              : [],
+          ),
+        ),
+      }),
     revision: Number(data.revision),
     createdAt: String(data.createdAt),
     updatedAt: String(data.updatedAt),
@@ -100,6 +110,9 @@ function tripDocument(trip: Trip): DocumentData {
       longitude: p.longitude,
     })),
     candidatePlaceIds: trip.candidatePlaceIds,
+    ...(trip.candidateRecommendationIds && {
+      candidateRecommendationIds: trip.candidateRecommendationIds,
+    }),
     revision: trip.revision,
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,

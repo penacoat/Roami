@@ -9,7 +9,9 @@ export default function ItineraryRoute() {
       tripId={tripId}
       onBack={() => router.navigate('/trip')}
       onExplore={() => router.navigate('/')}
-      onOpenPlace={(placeId) => router.navigate({ pathname: '/', params: { placeId } })}
+      onOpenPlace={(placeId, recommendationId) =>
+        router.navigate({ pathname: '/', params: { placeId, recommendationId } })
+      }
     />
   );
 }

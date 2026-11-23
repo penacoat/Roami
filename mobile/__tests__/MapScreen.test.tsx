@@ -37,6 +37,56 @@ beforeEach(() => {
   resetFixtures();
 });
 
+it('opens the exact postcard recommendation and carries its source into the itinerary', async () => {
+  const { trip } = await api.callApi('createTrip', {
+    city: 'Seattle source test',
+    startDate: '2026-11-23',
+    endDate: '2026-11-24',
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  function Request() {
+    const [placeId, setPlaceId] = React.useState<string | undefined>('p-jazz');
+    const clear = React.useCallback(() => setPlaceId(undefined), []);
+    return (
+      <MapScreen
+        onSignOut={async () => undefined}
+        requestedPlaceId={placeId}
+        requestedRecommendationId="r1"
+        onPlaceRequestHandled={clear}
+      />
+    );
+  }
+  await render(<Request />);
+  await screen.findByRole('header', { name: 'Selected recommendation' });
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Jazz Alley to an itinerary' }));
+  await fireEvent.press(await screen.findByRole('button', { name: /Seattle source test/ }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add place' }));
+  await screen.findByText('Added to Seattle source test · Day 1');
+  expect(
+    (await api.callApi('getTrip', { tripId: trip.trip.id })).trip.stops[0].recommendationIds,
+  ).toEqual(['r1']);
+});
+
+it('clears recommendation emphasis when another map pin is selected', async () => {
+  function Request() {
+    const [placeId, setPlaceId] = React.useState<string | undefined>('p-jazz');
+    const clear = React.useCallback(() => setPlaceId(undefined), []);
+    return (
+      <MapScreen
+        onSignOut={async () => undefined}
+        requestedPlaceId={placeId}
+        requestedRecommendationId="r1"
+        onPlaceRequestHandled={clear}
+      />
+    );
+  }
+  await render(<Request />);
+  await screen.findByRole('header', { name: 'Selected recommendation' });
+  await fireEvent.press(screen.getByLabelText('Map pin for Kerry Park'));
+  await screen.findByRole('header', { name: 'Kerry Park' });
+  expect(screen.queryByRole('header', { name: 'Selected recommendation' })).toBeNull();
+});
+
 function PlaceRequestHarness() {
   const [placeId, setPlaceId] = React.useState<string>();
   const clearRequest = React.useCallback(() => setPlaceId(undefined), []);
@@ -140,7 +190,7 @@ it('filters names and categories and explains an empty result', async () => {
   await screen.findByLabelText('Open Pike Place Market');
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'MUSEUM');
   expect(screen.getByLabelText('Open Seattle Art Museum')).toBeTruthy();
-  expect(screen.queryByLabelText('Map pin for Jazz Alley')).toBeNull();
+  await waitFor(() => expect(screen.queryByLabelText('Map pin for Jazz Alley')).toBeNull());
   await fireEvent.changeText(screen.getByLabelText('Search places'), 'nothing-matches');
   await screen.findByText('No places match. Clear the search or change a category.');
 });
@@ -389,7 +439,7 @@ it('unsaves through the service, updates Saved, and allows saving the place agai
   await fireEvent.press(screen.getByRole('button', { name: 'Saved · 1' }));
   await screen.findByLabelText('Open Jazz Alley');
   await fireEvent.press(screen.getByLabelText('Open Jazz Alley'));
-  await screen.findByText('Recommendation saved ✓');
+  await screen.findByText('Place + tip saved ✓');
   expect(screen.getByRole('button', { name: 'Save recommendation by Maya' })).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Unsave place' }));
   await screen.findByText('Removed from Saved. You can save this place again.');
