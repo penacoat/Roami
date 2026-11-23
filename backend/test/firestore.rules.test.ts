@@ -344,7 +344,10 @@ describe("trips: who can write and how", () => {
   it("persists a label-only starting point and walking preference", async () => {
     const data = {
       ...trip("alice", "t1", 1),
-      startingPoints: [{label: "My hotel"}],
+      startingPoints: [
+        {label: "My hotel"},
+        {label: "University of Washington", latitude: 47.655, longitude: -122.3035},
+      ],
       walkingLimit: {type: "distance", value: 3500},
     };
     const ref = doc(as("alice"), "trips/t1");
@@ -370,6 +373,33 @@ describe("trips: who can write and how", () => {
       setDoc(
         doc(as("alice"), "trips/invalidWalkingLimit"),
         {...trip("alice", "invalidWalkingLimit", 1), walkingLimit: {type: "distance", value: 100001}},
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "trips/partialCoordinates"),
+        {
+          ...trip("alice", "partialCoordinates", 1),
+          startingPoints: [{label: "My hotel", latitude: 47.6}],
+        },
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "trips/outOfRangeCoordinates"),
+        {
+          ...trip("alice", "outOfRangeCoordinates", 1),
+          startingPoints: [{label: "My hotel", latitude: 91, longitude: 0}],
+        },
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as("alice"), "trips/invalidWalkingDuration"),
+        {
+          ...trip("alice", "invalidWalkingDuration", 1),
+          walkingLimit: {type: "duration", value: 1441},
+        },
       ),
     );
   });

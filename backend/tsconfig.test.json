@@ -10,5 +10,5 @@
       "@roami/shared": ["../shared/src"]
     }
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "../mobile/src/types/firebase-auth.d.ts"]
 }

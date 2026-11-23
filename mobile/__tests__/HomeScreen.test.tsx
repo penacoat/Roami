@@ -27,6 +27,7 @@ const tripView: TripView = {
     endDate: todayKey,
     dailyWindow: { start: '09:00', end: '21:00' },
     startingPoints: [],
+    walkingLimit: null,
     candidatePlaceIds: [],
     revision: 1,
     createdAt: todayKey,

@@ -1,6 +1,6 @@
 # Roami
 
-Roami is a mobile app built with React Native and Expo for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for something specific, explore recommendations on a map, and save places for later. The current demo is focused on Seattle.
+Roami is an iOS mobile app built with React Native and Expo for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for places, explore recommendations on a map, save places, and plan trips. Seattle is the seeded demo city; Explore can also import other cities from OpenStreetMap.
 
 **Contents:** [Operational use cases](#operational-use-cases) · [Prerequisites](#prerequisites) · [Build](#build) · [Test](#test) · [Run](#run) · [Quick start](#quick-start) · [Troubleshooting](#troubleshooting) · [Architecture](#architecture) · [Repository layout](#repository-layout) · [Version control/bug tracking/CI](#version-control-bug-tracking-and-ci) · [Team](#team)
 
@@ -8,40 +8,50 @@ Roami is a mobile app built with React Native and Expo for social travel discove
 
 These are the user flows wired from the app to Firebase. Follow the [Run](#run) steps to exercise them on an iOS Simulator or iPhone.
 
-| Use case                                                               | Status                                                                                                                                                                                                                                            | How to see it work                                                                                                     |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Sign up/sign in, persist the session, and sign out                     | **Operational.** The auth screen uses Firebase Authentication. Sign-up calls `ensureProfile` through `callApi`; the registered profile service writes through its repository to Firestore, subject to Firestore rules.                            | Start the local emulators and app below, create an account, and check Authentication and Firestore in the Emulator UI. |
-| Explore Seattle places, search recommendations, and open place details | **Operational.** The Explore map calls the live place, search, and details services; they read the seeded Firestore data through repositories.                                                                                                    | In Explore, pan/zoom the map, tap a pin, open the places panel, and search (for example, `jazz`).                      |
-| Save and unsave a place or recommendation                              | **Operational.** Explore and Saved use live Firestore-backed save services. Personal saved-place notes are not editable in the UI.                                                                                                                | Save a place or recommendation from Explore, then open Saved. Unsave from either screen.                               |
-| Browse recommendation postcards                                        | **Operational.** The Postcards tab reads the live Seattle feed; cards can be flipped and “See place” opens the matching Explore details. Saving a recommendation is available from the details view.                                              | Open Postcards, flip a card, tap See place, then inspect or save the recommendation.                                   |
-| Create a trip and manage its itinerary                                 | **Operational for catalog-place stops.** Create trips, list and open them, add places from Explore or Saved to a day, optionally set visit times, edit/clear times, move stops between days, and remove stops. The itinerary is displayed by day. | Create a trip from Itineraries. Open it, or use Add to itinerary from a place in Explore/Saved.                        |
-| Edit a profile or saved-place note                                     | **API services only.** `getProfile`, `updateProfile`, and `updateSavedNote` are implemented and registered, but no profile or note editor is exposed in the app. Sign-up creates a basic profile.                                                 | No profile or note editing screen is available.                                                                        |
-| Create a recommendation                                                | **API service only.** `createRecommendation` writes through its registered service, but there is no contribution screen.                                                                                                                          | No contribution flow is available.                                                                                     |
-| Social and ranking features                                            | **Not available as app features.** Models and some Firestore rules exist for rankings, follows, likes, comments, visits, collections, blocks, and reports, but there are no corresponding app screens or registered API services.                 | Not available in the app.                                                                                              |
+| Use case                                                       | Status                                                                                                                                                                                                                                                                                                   | How to see it work                                                                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Sign up/sign in, persist the session, and sign out             | **Operational.** The auth screen uses Firebase Authentication. Sign-up calls `ensureProfile` through `callApi`; the registered profile service writes through its repository to Firestore, subject to Firestore rules.                                                                                   | Start the local emulators and app below, create an account, and check Authentication and Firestore in the Emulator UI. |
+| Explore places, search recommendations, and open place details | **Operational.** Explore resolves cities, loads catalog/OSM places, ranks search results, and supports category and saved-only filters. Place details include active recommendations.                                                                                                                    | In Explore, search for a place or recommendation (for example, `jazz`), change category/saved filters, and open a pin. |
+| Save and unsave a place or recommendation                      | **Operational.** Explore and Saved use live Firestore-backed save services. Personal saved-place notes are not editable in the UI.                                                                                                                                                                       | Save a place or recommendation from Explore, then open Saved. Unsave from either screen.                               |
+| Browse recommendation postcards                                | **Operational.** The Postcards tab reads the live Seattle feed; cards can be flipped and “See place” opens the matching Explore details. Saving a recommendation is available from the details view.                                                                                                     | Open Postcards, flip a card, tap See place, then inspect or save the recommendation.                                   |
+| Follow contributors and browse their recommendations           | **Operational.** Signed-in users can follow/unfollow postcard authors; the Following feed is limited to followed contributors and the Seattle feed. Users cannot follow themselves.                                                                                                                      | Open Postcards, select Following, then follow or unfollow a contributor from a card.                                   |
+| Create trips and manage itineraries                            | **Operational.** Create and open trips; add places or fixed activities; view by day, calendar, or map; generate and compare itinerary options; set times; move/reorder or remove stops. Legacy trips without preferences remain supported.                                                               | Create a trip from Itineraries, add catalog places, or create a fixed activity on a day.                               |
+| Set trip starting point and walking preference                 | **Operational as stored preferences.** Trip creation accepts a label-only starting location and a maximum walking distance or duration; the itinerary displays them. Optional coordinates are supported by the model/API, not collected in UI. Walking routes and limits are not calculated or enforced. | Create a trip with a starting location and/or walking preference, then view its itinerary.                             |
+| View current/upcoming trip dashboard                           | **Operational.** Home shows the user's current or next trip, dates, today's stops, and upcoming activities, with empty, loading, error, and retry states.                                                                                                                                                | Open the Home tab and use Open itinerary.                                                                              |
+| Record visits and personal place rankings                      | **Operational.** Users can mark a place visited and maintain their own category rankings from place details, itinerary stops, and the Saved journal. These are personal records, not a global leaderboard.                                                                                               | Open place details or Saved, then use the visit/journal controls.                                                      |
+| Edit a profile or saved-place note                             | **API services only.** `getProfile`, `updateProfile`, and `updateSavedNote` are implemented and registered, but no profile or note editor is exposed in the app. Sign-up creates a basic profile.                                                                                                        | No profile or note editing screen is available.                                                                        |
+| Create a recommendation                                        | **API service only.** `createRecommendation` writes through its registered service, but there is no contribution screen.                                                                                                                                                                                 | No contribution flow is available.                                                                                     |
+| Other social features                                          | **Not available as app features.** Likes, comments, collections, blocks, and reports have models and/or Firestore rules but no corresponding app flows.                                                                                                                                                  | Not available in the app.                                                                                              |
 
 ### API registration and screen call sites
 
-All 21 functions in the shared API contract have real handlers registered by `registerServices()`. Registration alone does not make a use case operational: a screen must call the handler. “Developer check only” refers to `backendCheck.ts`, which is not presented by the running app. `PlacesCheck` has no route from the app. Expo Router connects Explore, Postcards, Itineraries, and Saved after sign-in; trip creation and itinerary details are protected routes.
+Every app API call used in live mode has a registered handler in `registerServices()`. Registration alone does not make a use case operational: a screen must call the handler. “Developer check only” refers to `backendCheck.ts`, which is not presented by the running app. Expo Router connects Home, Explore, Postcards, Itineraries, and Saved after sign-in; trip creation and itinerary details are protected routes.
 
-| API call                                           | Real service registered? | Screen/component call site                           |
-| -------------------------------------------------- | -----------------------: | ---------------------------------------------------- |
-| `ensureProfile`                                    |                      Yes | Sign-up and app root                                 |
-| `getProfile`, `updateProfile`                      |                      Yes | Developer check only                                 |
-| `listPlaces`, `searchRecommendations`              |                      Yes | Explore                                              |
-| `getPlace`                                         |                      Yes | Explore place details                                |
-| `getFeed`                                          |                      Yes | Postcards                                            |
-| `createRecommendation`                             |                      Yes | No contribution screen                               |
-| `savePlace`, `listSavedPlaces`, `removeSavedPlace` |                      Yes | Explore, place details, and Saved                    |
-| `updateSavedNote`                                  |                      Yes | Developer check only                                 |
-| `createTrip`                                       |                      Yes | Itineraries                                          |
-| `listTrips`, `getTrip`                             |                      Yes | Itineraries, trip details, and Add to itinerary      |
-| `addStop`                                          |                      Yes | Add to itinerary from Explore/place details or Saved |
-| `moveStop`, `removeStop`, `updateStopTime`         |                      Yes | Itinerary details                                    |
-| `addCandidate`, `removeCandidate`                  |                      Yes | Developer check only; no candidate UI                |
+| API call                                                        | Real service registered? | Screen/component call site                           |
+| --------------------------------------------------------------- | -----------------------: | ---------------------------------------------------- |
+| `ensureProfile`                                                 |                      Yes | Sign-up and app root                                 |
+| `getProfile`, `updateProfile`                                   |                      Yes | Developer check only                                 |
+| `resolveCity`, `listPlaces`, `searchRecommendations`            |                      Yes | Explore                                              |
+| `getPlace`                                                      |                      Yes | Explore place details                                |
+| `getFeed`                                                       |                      Yes | Postcards (Everyone or Following)                    |
+| `getFollowing`, `followUser`, `unfollowUser`                    |                      Yes | Postcards                                            |
+| `createRecommendation`                                          |                      Yes | No contribution screen                               |
+| `savePlace`, `listSavedPlaces`, `removeSavedPlace`              |                      Yes | Explore, place details, and Saved                    |
+| `updateSavedNote`                                               |                      Yes | Developer check only                                 |
+| `createTrip`                                                    |                      Yes | Itineraries                                          |
+| `listTrips`, `getTrip`                                          |                      Yes | Itineraries, trip details, and Add to itinerary      |
+| `addStop`                                                       |                      Yes | Add to itinerary from Explore/place details or Saved |
+| `deleteTrip`                                                    |                      Yes | Itineraries and trip details                         |
+| `moveStop`, `removeStop`, `updateStopTime`, `updateStopDetails` |                      Yes | Itinerary details                                    |
+| `addFixedActivity`, `applyItinerary`                            |                      Yes | Itinerary details                                    |
+| `addCandidate`                                                  |                      Yes | Add to itinerary                                     |
+| `removeCandidate`                                               |                      Yes | Developer check only                                 |
+| `listPreparation`, `savePreparation`, `removePreparation`       |                      Yes | Itinerary preparation checklist                      |
+| `getPlaceJournal`, `markVisited`, `saveRanking`                 |                      Yes | Place details, itinerary, and Saved journal          |
 
-The trip API accepts optional `startingPoints`, but the trip-creation screen does not collect them. No route service or maximum-walking-distance setting is implemented; walking time remains unknown rather than being estimated. The UI adds catalog places as stops, but does not create fixed commitments, edit trip dates/cities after creation, or reorder stops within a day.
+Starting locations are label-only in the trip-creation UI; coordinates are optional in the shared model but not collected there. Walking preferences are persisted and displayed only; no routing, walking-time calculation, or enforcement is implemented.
 
-The local seed contains **2 users, 50 places, and 75 recommendations**. Coordinates are approximate sample pins; opening hours and walking times are unknown; recommendation text is illustrative, not user-submitted reviews. Sample postcards use illustrative photos. The catalog is Seattle-only. Fixture mode keeps app data in memory; use live mode with Firebase for persistence.
+The local seed contains **2 users, 50 places, and 75 recommendations**. Coordinates are approximate sample pins; opening hours and walking times are unknown; recommendation text is illustrative, not user-submitted reviews. Sample postcards use illustrative photos. Seattle is the seeded catalog; other cities can be imported from OpenStreetMap. Fixture mode keeps app data in memory; use live mode with Firebase for persistence.
 
 ## Prerequisites
 
@@ -96,7 +106,7 @@ npm --prefix mobile run typecheck
 npm --prefix mobile run test:ci
 ```
 
-Expected: **24 suites, 197 tests passing**.
+Expected: **41 suites, 365 tests passing**.
 
 ### Backend unit tests without emulators
 
@@ -110,7 +120,7 @@ Expected: **3 suites, 22 tests passing**.
 
 ### Backend emulator tests
 
-Expected: **6 suites, 124 tests passing** (about 20 seconds). The suite includes 98 Firestore Rules tests, 3 recommendation-service integration tests, 1 seed integration test, and the 22 no-emulator unit tests listed above. The first 102 tests require local Auth and Firestore emulators; Java 21 or newer is required:
+Expected: **7 suites, 161 tests passing**. The complete suite includes Firestore rules, recommendation/seed integration, and seed unit tests. It runs against local Auth and Firestore emulators; Java 21 or newer is required:
 
 ```bash
 npx --yes firebase-tools emulators:exec --only auth,firestore "npm --prefix backend run test:rules -- --runInBand"
@@ -222,7 +232,7 @@ Screen → callApi(name, request) → registered service → repository → Fire
 
 ESLint checks the intended layering; see [docs/coding-guidelines.md](docs/coding-guidelines.md). More developer references: [where code goes](docs/where-code-goes.md) and [shared models](docs/shared-models.md). The setup guides in `docs/mobile-app-setup.md` and `docs/firebase-setup.md` contain stale SDK, Node, or Functions instructions; use this README for current installation, emulator, and run steps.
 
-Native map tiles, gestures, keyboard behavior, and tab/panel layout still need an iPhone or simulator check; browser review uses a labeled map substitute. The catalog and Postcards feed are Seattle-only. Itineraries support catalog-place stops, day assignment, time editing, moving stops between days, and removal, but not fixed commitments, within-day reordering, or trip date/city editing. Starting points are accepted by the trip API but are not collected in the UI. Walking-time estimates and maximum-walking-distance constraints are not implemented. Profile editing and recommendation contribution have API services but no UI; ranking, follows, likes, comments, visits, collections, blocks, and reports are not exposed as app features. Some itinerary validation lives in client code. Values bundled into a mobile app (including Firebase client configuration) are public; access control belongs in Firestore rules. Search caches each city's data for 60 seconds.
+Native map tiles, gestures, keyboard behavior, and tab/panel layout still need an iPhone or simulator check; browser review uses a labeled map substitute. Seattle is the seeded demo city; other cities rely on OpenStreetMap imports. Walking preferences are stored but do not produce or constrain routes. Profile editing, recommendation contribution, ranking, likes, comments, visits, collections, blocks, and reports are not exposed as app features. Some itinerary validation lives in client code. Values bundled into a mobile app (including Firebase client configuration) are public; access control belongs in Firestore rules. Search caches each city's data for 60 seconds.
 
 ## Repository layout
 
@@ -238,7 +248,7 @@ Roami/
 │   │   ├── dev/                 # Developer checks (not mounted in the app)
 │   │   ├── logic/               # Pure search and trip logic
 │   │   ├── repositories/        # Firestore data access
-│   │   ├── screens/             # Explore, Saved, Postcards, and itinerary screens
+│   │   ├── screens/             # Home, Explore, Saved, Postcards, and itinerary screens
 │   │   └── services/            # Registered live API handlers
 │   ├── __tests__/               # Jest tests
 │   ├── test-utils/              # In-memory Firestore test helper
