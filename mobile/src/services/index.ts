@@ -4,6 +4,7 @@ import { getPlaceJournal, markVisited, saveRanking } from './JournalService';
 import { listPreparation, savePreparation, removePreparation } from './PreparationService';
 import { getFeed } from './DiscoveryService';
 import { getPlace, listPlaces, resolveCity } from './PlaceService';
+import { followUser, getFollowing, unfollowUser } from './FollowService';
 import { ensureProfile, getProfile, updateProfile } from './ProfileService';
 import { createRecommendation } from './RecommendationService';
 import {
@@ -40,6 +41,9 @@ export function registerServices(): void {
     updateProfile,
     getPlace,
     getFeed,
+    getFollowing,
+    followUser,
+    unfollowUser,
     searchRecommendations,
     createRecommendation,
     savePlace,

@@ -8,6 +8,7 @@ import { buttonOutline } from '../../components/buttonStyles';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 const icons: Record<string, readonly [IconName, IconName]> = {
+  home: ['home-outline', 'home'],
   index: ['compass-outline', 'compass'],
   postcards: ['mail-outline', 'mail'],
   trip: ['map-outline', 'map'],
@@ -57,6 +58,7 @@ export default function AppTabs() {
         ),
       })}
     >
+      <Tabs.Screen name="home" options={{ title: 'Home' }} />
       <Tabs.Screen name="index" options={{ title: 'Explore' }} />
       <Tabs.Screen name="postcards" options={{ title: 'Postcards' }} />
       <Tabs.Screen name="trip" options={{ title: 'Itineraries' }} />

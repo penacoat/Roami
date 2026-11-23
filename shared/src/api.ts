@@ -99,9 +99,31 @@ export interface GetFeedRequest {
   city: string;
   cityId?: string;
   limit?: number;
+  followingOnly?: boolean;
 }
 export interface GetFeedResponse {
   items: RecommendationView[];
+}
+
+export interface GetFollowingResponse {
+  userId: string;
+  userIds: string[];
+}
+
+export interface FollowUserRequest {
+  userId: string;
+}
+
+export interface FollowUserResponse {
+  followed: true;
+}
+
+export interface UnfollowUserRequest {
+  userId: string;
+}
+
+export interface UnfollowUserResponse {
+  unfollowed: true;
 }
 
 export interface SearchRecommendationsRequest {
@@ -325,6 +347,9 @@ export interface ApiContract {
   listPlaces: { request: ListPlacesRequest; response: ListPlacesResponse };
   getPlace: { request: GetPlaceRequest; response: GetPlaceResponse };
   getFeed: { request: GetFeedRequest; response: GetFeedResponse };
+  getFollowing: { request: Record<string, never>; response: GetFollowingResponse };
+  followUser: { request: FollowUserRequest; response: FollowUserResponse };
+  unfollowUser: { request: UnfollowUserRequest; response: UnfollowUserResponse };
   searchRecommendations: {
     request: SearchRecommendationsRequest;
     response: SearchRecommendationsResponse;

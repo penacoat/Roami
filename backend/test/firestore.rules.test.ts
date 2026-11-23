@@ -975,4 +975,12 @@ describe("Task 8 read policies", () => {
     await assertSucceeds(getDoc(doc(as("bob"), "follows/f1")));
     await assertFails(getDoc(doc(as("carol"), "follows/f1")));
   });
+  it("allows contributors to list only relationships they participate in", async () => {
+    await assertSucceeds(
+      getDocs(query(collection(as("alice"), "follows"), where("followerId", "==", "alice"))),
+    );
+    await assertFails(
+      getDocs(query(collection(as("carol"), "follows"), where("followerId", "==", "alice"))),
+    );
+  });
 });

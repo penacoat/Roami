@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import * as api from '../src/api/ApiClient';
 import { resetFixtures } from '../src/api';
@@ -44,8 +44,25 @@ it('shows a feed failure and recovers through retry', async () => {
 });
 
 it('explains an empty feed without inventing postcards', async () => {
-  jest.spyOn(api, 'callApi').mockResolvedValue({ items: [] });
+  const original = api.callApi;
+  jest.spyOn(api, 'callApi').mockImplementation((name, request) => {
+    if (name === 'getFeed') return Promise.resolve({ items: [] });
+    return original(name, request);
+  });
   await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
   await screen.findByText('No postcards for Seattle yet.');
   expect(screen.queryByText('See place ›')).toBeNull();
+});
+
+it('follows a postcard author and shows their recommendations in the Following feed', async () => {
+  await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
+  await screen.findByLabelText('Read postcard for Jazz Alley by Maya');
+  await fireEvent.press(screen.getAllByRole('button', { name: 'Follow Maya' })[0]);
+  await waitFor(() =>
+    expect(screen.getAllByText('Following · Unfollow').length).toBeGreaterThan(0),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Following' }));
+  await screen.findByText('Following · Seattle');
+  await screen.findByLabelText('Read postcard for Jazz Alley by Maya');
+  expect(screen.queryByLabelText(/by .* other than Maya/)).toBeNull();
 });
