@@ -220,7 +220,7 @@ describe('restoreSavedPlace', () => {
     await rejectsWith(restore({ placeId: 'nope' }), 'not-found');
   });
 
-  it('only ever writes the signed-in user\'s own save', async () => {
+  it("only ever writes the signed-in user's own save", async () => {
     await restore();
     expect(fake.all('savedPlaces').map((d) => (d as { userId: string }).userId)).toEqual(['alice']);
   });

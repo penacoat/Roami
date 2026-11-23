@@ -74,7 +74,9 @@ it('loads more postcards below the ones shown, then hides the button', async () 
   const { first, rest, calls } = await twoPages();
   await render(<RecommendationsScreen onOpenPlace={jest.fn()} />);
   await screen.findByLabelText(new RegExp(`^Read postcard for ${first[0]!.place.name}`));
-  expect(screen.queryByLabelText(new RegExp(`^Read postcard for ${rest[0]!.place.name} by`))).toBeNull();
+  expect(
+    screen.queryByLabelText(new RegExp(`^Read postcard for ${rest[0]!.place.name} by`)),
+  ).toBeNull();
   await fireEvent.press(screen.getByRole('button', { name: 'Load more postcards' }));
   await screen.findAllByLabelText(/^Read postcard for/);
   await waitForCount(first.length + rest.length);
@@ -98,7 +100,9 @@ it('keeps the postcards and offers a retry when loading more fails', async () =>
   expect(screen.getAllByLabelText(/^Read postcard for/)).toHaveLength(first.length);
   fail = false;
   await fireEvent.press(screen.getByRole('button', { name: 'Retry loading more' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry loading more' })).toBeNull());
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Retry loading more' })).toBeNull(),
+  );
   expect(screen.getAllByLabelText(/^Read postcard for/).length).toBeGreaterThan(first.length);
 });
 
@@ -109,7 +113,5 @@ it('shows no Load more button when everything fits on one page', async () => {
 });
 
 async function waitForCount(count: number) {
-  await waitFor(() =>
-    expect(screen.getAllByLabelText(/^Read postcard for/)).toHaveLength(count),
-  );
+  await waitFor(() => expect(screen.getAllByLabelText(/^Read postcard for/)).toHaveLength(count));
 }
