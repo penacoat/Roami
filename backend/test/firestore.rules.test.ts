@@ -375,6 +375,48 @@ describe("trips: who can write and how", () => {
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
     await assertFails(updateDoc(doc(as("bob"), "trips/t1"), {revision: 2}));
   });
+  it("lets the owner archive a trip and bring it back", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    const archivedAt = "2026-11-22T12:00:00.000Z";
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt}),
+    );
+    // Unarchiving saves the trip without the field.
+    await assertSucceeds(setDoc(doc(as("alice"), "trips/t1"), trip("alice", "t1", 3)));
+  });
+  it("keeps an archived trip readable by its owner and viewers", async () => {
+    await seed("trips/t1", {...trip("alice", "t1", 2), archivedAt: "2026-11-22T12:00:00.000Z"});
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertSucceeds(getDoc(doc(as("alice"), "trips/t1")));
+    await assertSucceeds(getDoc(doc(as("bob"), "trips/t1")));
+  });
+  it("blocks archiving without raising the revision", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(
+      updateDoc(doc(as("alice"), "trips/t1"), {archivedAt: "2026-11-22T12:00:00.000Z"}),
+    );
+  });
+  it("blocks anyone but the owner from archiving a trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    const archived = {...trip("alice", "t1", 2), archivedAt: "2026-11-22T12:00:00.000Z"};
+    await assertFails(setDoc(doc(as("bob"), "trips/t1"), archived));
+    await assertFails(setDoc(doc(as("carol"), "trips/t1"), archived));
+  });
+  it("accepts only a short string or null for archivedAt", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: 5}));
+    await assertFails(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: "x".repeat(41)}),
+    );
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: null}),
+    );
+  });
+  it("still blocks unknown fields on a trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archived: true}));
+  });
   it("lets only the owner delete a trip", async () => {
     await seed("trips/t1", trip("alice", "t1", 1));
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});

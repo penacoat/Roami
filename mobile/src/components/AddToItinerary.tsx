@@ -60,7 +60,7 @@ export function AddToItinerary({
           if (active) setSelected(trip);
         })
       : callApi('listTrips', { includeScheduledPlaces: true }).then(({ trips: items }) => {
-          if (active) setTrips(items);
+          if (active) setTrips(items.filter((trip) => !trip.archivedAt));
         });
     load
       .catch(() => {

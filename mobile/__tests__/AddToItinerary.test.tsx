@@ -186,3 +186,14 @@ it('preserves and deduplicates recommendation sources when adding a scheduled st
   const saved = (await callApi('getTrip', { tripId: trip.trip.id })).trip;
   expect(saved.stops[0].recommendationIds).toEqual(['r1', 'r2']);
 });
+
+it('does not offer an archived itinerary', async () => {
+  const archived = await create('Portland');
+  await create('Denver');
+  await callApi('setTripArchived', { tripId: archived.trip.id, archived: true });
+  const { places } = await callApi('listPlaces', { city: 'Seattle' });
+  await render(<AddToItinerary place={places.find((place) => place.id === 'p-jazz')!} />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Jazz Alley to an itinerary' }));
+  await screen.findByRole('button', { name: /Denver/ });
+  expect(screen.queryByRole('button', { name: /Portland/ })).toBeNull();
+});

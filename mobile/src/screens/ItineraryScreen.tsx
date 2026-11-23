@@ -376,6 +376,11 @@ export function ItineraryScreen({
             <Text style={styles.muted}>
               {formatDate(view.trip.startDate)} – {formatDate(view.trip.endDate)}
             </Text>
+            {view.trip.archivedAt ? (
+              <Text style={styles.muted}>
+                Archived. It is out of your main list until you unarchive it.
+              </Text>
+            ) : null}
             {canEdit && (
               <>
                 <Pressable
@@ -907,6 +912,27 @@ export function ItineraryScreen({
                 disabled={pending || dragging}
                 onBusy={setPhotosBusy}
               />
+            )}
+            {canEdit && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={pending || dragging || photosBusy}
+                onPress={() => {
+                  const archiving = !view.trip.archivedAt;
+                  void change(
+                    () => callApi('setTripArchived', { tripId, archived: archiving }),
+                    archiving
+                      ? 'Could not archive this itinerary. Try again.'
+                      : 'Could not unarchive this itinerary. Try again.',
+                    archiving ? 'Itinerary archived.' : 'Itinerary is back in your main list.',
+                  );
+                }}
+                style={[styles.button, { alignSelf: 'flex-start' }]}
+              >
+                <Text style={styles.buttonText}>
+                  {view.trip.archivedAt ? 'Unarchive itinerary' : 'Archive itinerary'}
+                </Text>
+              </Pressable>
             )}
             {canEdit && (
               <Pressable

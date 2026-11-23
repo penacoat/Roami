@@ -176,6 +176,8 @@ export interface Trip {
   candidatePlaceIds: PlaceId[]; // candidates are not scheduled until they become stops
   candidateRecommendationIds?: Record<PlaceId, RecommendationId[]>; // sources retained through planning
   revision: number; // increases on every saved change, to detect outdated edits
+  /** When the owner archived the trip. Missing or null means it is active. */
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

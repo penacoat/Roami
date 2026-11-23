@@ -44,3 +44,60 @@ it('pulls new itineraries from an empty list and can retry a failed pull', async
   );
   await screen.findByLabelText('Open itinerary: Seattle, Nov 23, 2026');
 });
+
+async function makeTrip(city: string, startDate: string) {
+  const { trip } = await api.callApi('createTrip', {
+    city,
+    startDate,
+    endDate: startDate,
+    dailyWindow: { start: '09:00', end: '21:00' },
+  });
+  return trip.trip.id;
+}
+
+const props = { refreshKey: 1, onOpen: jest.fn(), onCreate: jest.fn() };
+
+it('archives a trip out of the main list and shows it under archived itineraries', async () => {
+  await makeTrip('Seattle', '2026-10-01');
+  await makeTrip('Portland', '2026-11-01');
+  await render(<ItinerariesScreen {...props} />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Archive Seattle itinerary' }));
+  await screen.findByText('Seattle archived. Find it under Archived itineraries.');
+  expect(screen.queryByRole('button', { name: /^Open itinerary: Seattle/ })).toBeNull();
+  expect(screen.getByRole('button', { name: /^Open itinerary: Portland/ })).toBeTruthy();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Show archived itineraries (1)' }));
+  expect(screen.getByRole('button', { name: /^Open itinerary: Seattle/ })).toBeTruthy();
+  expect((await api.callApi('listTrips', {})).trips.map((t) => !!t.archivedAt)).toEqual([
+    true,
+    false,
+  ]);
+});
+
+it('unarchives a trip back into the main list', async () => {
+  const id = await makeTrip('Seattle', '2026-10-01');
+  await api.callApi('setTripArchived', { tripId: id, archived: true });
+  await render(<ItinerariesScreen {...props} />);
+  await screen.findByText('No active itineraries.');
+  await fireEvent.press(screen.getByRole('button', { name: 'Show archived itineraries (1)' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Unarchive Seattle itinerary' }));
+  await screen.findByText('Seattle is back in your list.');
+  expect(screen.getByRole('button', { name: /^Open itinerary: Seattle/ })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /archived itineraries/ })).toBeNull();
+});
+
+it('keeps the trip where it is and shows an error when archiving fails', async () => {
+  await makeTrip('Seattle', '2026-10-01');
+  await render(<ItinerariesScreen {...props} />);
+  await screen.findByRole('button', { name: 'Archive Seattle itinerary' });
+  jest.spyOn(api, 'callApi').mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Archive Seattle itinerary' }));
+  await screen.findByText('Could not archive Seattle. Try again.');
+  expect(screen.getByRole('button', { name: /^Open itinerary: Seattle/ })).toBeTruthy();
+});
+
+it('hides the archived section when nothing is archived and keeps the empty message', async () => {
+  await render(<ItinerariesScreen {...props} />);
+  await screen.findByText('No itineraries yet.');
+  expect(screen.queryByRole('button', { name: /archived itineraries/ })).toBeNull();
+});
