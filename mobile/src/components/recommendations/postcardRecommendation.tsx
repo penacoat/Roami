@@ -78,13 +78,11 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
       >
         {showBack ? (
           <View style={styles.back}>
-            {Array.from({ length: 7 }, (_, index) => (
+            {Array.from({ length: 14 }, (_, index) => (
               <View key={index} style={[styles.ruledLine, { top: 44 + index * 32 }]} />
             ))}
             <View style={styles.backLeft}>
-              <Text style={styles.note} numberOfLines={7}>
-                “{recommendation.description}”
-              </Text>
+              <Text style={styles.note}>“{recommendation.description.repeat(4)}”</Text>
               <View>
                 <Text style={styles.signature}>— {name}</Text>
                 <View style={styles.flipButton}>
@@ -109,7 +107,12 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
               {photo ? <Image source={{ uri: photo }} style={styles.photo} /> : null}
               {photo ? <View style={styles.photoShade} /> : null}
               {photo ? <Text style={styles.photoLabel}>Illustrative photo</Text> : null}
-              <Text style={styles.frontPicture} numberOfLines={2}>
+              <Text
+                style={styles.frontPicture}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
                 {recommendation.place.name}
               </Text>
               <View style={[styles.flipButton, styles.flipCorner]}>
@@ -221,7 +224,7 @@ const styles = StyleSheet.create({
   //postcard
   postcard: {
     ...buttonOutline,
-    height: 300,
+    minHeight: 300,
     overflow: 'hidden',
   },
   front: {
