@@ -82,7 +82,7 @@ export function PostcardRecommendation({ recommendation, onOpenPlace }: Props) {
               <View key={index} style={[styles.ruledLine, { top: 44 + index * 32 }]} />
             ))}
             <View style={styles.backLeft}>
-              <Text style={styles.note}>“{recommendation.description.repeat(4)}”</Text>
+              <Text style={styles.note}>“{recommendation.description}”</Text>
               <View>
                 <Text style={styles.signature}>— {name}</Text>
                 <View style={styles.flipButton}>
