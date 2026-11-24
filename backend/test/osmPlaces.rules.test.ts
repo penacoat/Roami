@@ -32,6 +32,8 @@ beforeEach(async () => {
 });
 
 const as = (uid: string) => env.authenticatedContext(uid).firestore();
+const asCatalogEditor = (uid: string) =>
+  env.authenticatedContext(uid, {catalogEditor: true}).firestore();
 const anonymous = () => env.unauthenticatedContext().firestore();
 const daysAgo = (days: number) => Timestamp.fromMillis(Date.now() - days * DAY);
 
@@ -70,15 +72,21 @@ async function seed(path: string, data: Record<string, unknown>) {
 }
 
 describe("importing places from OpenStreetMap", () => {
-  it("lets a signed-in user create a well-formed OSM place", async () => {
-    await assertSucceeds(setDoc(doc(as("alice"), "places/osm-node-123"), osmPlace()));
+  it("lets a catalog editor create a well-formed OSM place", async () => {
+    await assertSucceeds(setDoc(doc(asCatalogEditor("alice"), "places/osm-node-123"), osmPlace()));
   });
 
   it("accepts unknown opening hours as null", async () => {
     await assertSucceeds(setDoc(
-      doc(as("alice"), "places/osm-node-123"),
+      doc(asCatalogEditor("alice"), "places/osm-node-123"),
       osmPlace({openingHours: null, missingFields: ["openingHours"]}),
     ));
+  });
+
+  it("blocks ordinary signed-in users from publishing fabricated places but keeps catalog reads public", async () => {
+    await assertFails(setDoc(doc(as("alice"), "places/osm-node-123"), osmPlace()));
+    await seed("places/osm-node-123", osmPlace({importedAt: daysAgo(5)}));
+    await assertSucceeds(getDoc(doc(as("bob"), "places/osm-node-123")));
   });
 
   it("refuses signed-out users", async () => {
@@ -98,7 +106,7 @@ describe("importing places from OpenStreetMap", () => {
     ["a cost", "places/osm-node-123", {cost: {amount: 5, currency: "USD"}}],
     ["a backdated import time", "places/osm-node-123", {importedAt: daysAgo(60)}],
   ])("refuses a place with %s", async (_why, path, overrides) => {
-    await assertFails(setDoc(doc(as("alice"), path), osmPlace(overrides)));
+    await assertFails(setDoc(doc(asCatalogEditor("alice"), path), osmPlace(overrides)));
   });
 
   it("allows exactly the categories the importer produces", async () => {
@@ -112,12 +120,17 @@ describe("importing places from OpenStreetMap", () => {
 
   it("lets a stale place be refreshed", async () => {
     await seed("places/osm-node-123", osmPlace({importedAt: daysAgo(31)}));
-    await assertSucceeds(setDoc(doc(as("bob"), "places/osm-node-123"), osmPlace({name: "Portland Art Museum (renamed)"})));
+    await assertSucceeds(setDoc(doc(asCatalogEditor("bob"), "places/osm-node-123"), osmPlace({name: "Portland Art Museum (renamed)"})));
+  });
+
+  it("blocks a non-editor from rewriting even a stale OSM place", async () => {
+    await seed("places/osm-node-123", osmPlace({importedAt: daysAgo(31)}));
+    await assertFails(setDoc(doc(as("bob"), "places/osm-node-123"), osmPlace({name: "Fake place"})));
   });
 
   it("refuses moving a stale place to another city", async () => {
     await seed("places/osm-node-123", osmPlace({importedAt: daysAgo(31)}));
-    await assertFails(setDoc(doc(as("bob"), "places/osm-node-123"), osmPlace({cityId: "osm-relation-1"})));
+    await assertFails(setDoc(doc(asCatalogEditor("bob"), "places/osm-node-123"), osmPlace({cityId: "osm-relation-1"})));
   });
 
   it("never lets the app change or delete hand-made places", async () => {
@@ -139,10 +152,16 @@ describe("importing places from OpenStreetMap", () => {
 });
 
 describe("city import records", () => {
-  it("lets a signed-in user read and create one", async () => {
-    await assertSucceeds(setDoc(doc(as("alice"), "cityImports/osm-relation-186579"), cityImport()));
+  it("lets a catalog editor create one while signed-in users can read it", async () => {
+    await assertSucceeds(setDoc(doc(asCatalogEditor("alice"), "cityImports/osm-relation-186579"), cityImport()));
     await assertSucceeds(getDoc(doc(as("bob"), "cityImports/osm-relation-186579")));
     await assertFails(getDoc(doc(anonymous(), "cityImports/osm-relation-186579")));
+  });
+
+  it("blocks ordinary signed-in users from creating or refreshing import records", async () => {
+    await assertFails(setDoc(doc(as("alice"), "cityImports/osm-relation-186579"), cityImport()));
+    await seed("cityImports/osm-relation-186579", cityImport({importedAt: daysAgo(31)}));
+    await assertFails(setDoc(doc(as("bob"), "cityImports/osm-relation-186579"), cityImport()));
   });
 
   it.each([
@@ -151,18 +170,18 @@ describe("city import records", () => {
     ["a backdated import time", {importedAt: daysAgo(60)}],
     ["extra fields", {note: "hi"}],
   ])("refuses one with %s", async (_why, overrides) => {
-    await assertFails(setDoc(doc(as("alice"), "cityImports/osm-relation-186579"), cityImport(overrides)));
+    await assertFails(setDoc(doc(asCatalogEditor("alice"), "cityImports/osm-relation-186579"), cityImport(overrides)));
   });
 
   it("refuses a city ID that isn't an OSM city", async () => {
-    await assertFails(setDoc(doc(as("alice"), "cityImports/Portland"), cityImport({cityId: "Portland"})));
+    await assertFails(setDoc(doc(asCatalogEditor("alice"), "cityImports/Portland"), cityImport({cityId: "Portland"})));
   });
 
   it("only lets a city be marked imported again once it is due for a refresh", async () => {
     await seed("cityImports/osm-relation-186579", cityImport({importedAt: daysAgo(5)}));
-    await assertFails(setDoc(doc(as("bob"), "cityImports/osm-relation-186579"), cityImport()));
+    await assertFails(setDoc(doc(asCatalogEditor("bob"), "cityImports/osm-relation-186579"), cityImport()));
     await seed("cityImports/osm-relation-186579", cityImport({importedAt: daysAgo(31)}));
-    await assertSucceeds(setDoc(doc(as("bob"), "cityImports/osm-relation-186579"), cityImport()));
+    await assertSucceeds(setDoc(doc(asCatalogEditor("bob"), "cityImports/osm-relation-186579"), cityImport()));
   });
 
   it("can't be deleted from the app", async () => {

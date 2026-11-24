@@ -14,6 +14,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function catalogEditor() {
+      return signedIn() && request.auth.token.catalogEditor == true;
+    }
+
     function tripOwnerId(tripId) {
       return get(/databases/$(database)/documents/trips/$(tripId)).data.ownerId;
     }
@@ -299,9 +303,8 @@ service cloud.firestore {
     // ---------- Places imported from OpenStreetMap ----------
     // Keep in step with mobile/src/logic/osmPlaces.ts: REFRESH_DAYS (30),
     // MAX_NAME_LENGTH, MAX_HOURS_LENGTH and OSM_CATEGORIES.
-    // The rules can check a place's shape but not that it really came from
-    // OSM, so a signed-in user could add a made-up place. Nobody can delete
-    // places or change hand-made ones.
+    // Rules validate the record shape, not its OSM provenance. Only trusted
+    // catalog editors may create or refresh imported places.
 
     function refreshDue(d) {
       return request.time > d.importedAt + duration.value(30, 'd');
@@ -341,14 +344,12 @@ service cloud.firestore {
         && d.importedAt == request.time;
     }
 
-    // Place catalog. Hand-made places come from the admin seed script and
-    // can't be changed from the app. Any signed-in user can add a place from
-    // OpenStreetMap, and rewrite one only once it is due for a refresh, without
-    // moving it to another city.
+    // Hand-made places come from the admin seed script. OSM catalog writes are
+    // limited to trusted users with the catalogEditor custom claim.
     match /places/{placeId} {
       allow read: if signedIn();
-      allow create: if signedIn() && validOsmPlace(placeId, request.resource.data);
-      allow update: if signedIn()
+      allow create: if catalogEditor() && validOsmPlace(placeId, request.resource.data);
+      allow update: if catalogEditor()
         && resource.data.source.provider == 'osm'
         && refreshDue(resource.data)
         && validOsmPlace(placeId, request.resource.data)
@@ -356,11 +357,11 @@ service cloud.firestore {
     }
 
     // One record per imported city, written after its places. Rewritten only
-    // when the city is due for a refresh.
+    // when the city is due for a refresh by a trusted catalog editor.
     match /cityImports/{cityId} {
       allow read: if signedIn();
-      allow create: if signedIn() && validCityImport(cityId, request.resource.data);
-      allow update: if signedIn()
+      allow create: if catalogEditor() && validCityImport(cityId, request.resource.data);
+      allow update: if catalogEditor()
         && refreshDue(resource.data)
         && validCityImport(cityId, request.resource.data);
     }

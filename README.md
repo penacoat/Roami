@@ -1,6 +1,6 @@
 # Roami
 
-Roami is an iOS mobile app built with React Native and Expo for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for places, explore recommendations on a map, save places, and plan trips. Seattle is the seeded demo city; Explore can also import other cities from OpenStreetMap.
+Roami is an iOS mobile app built with React Native and Expo for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for places, explore recommendations on a map, save places, and plan trips. Seattle is the seeded demo city; trusted catalog editors can trigger imports of other cities from OpenStreetMap in Explore.
 
 **Contents:** [Operational use cases](#operational-use-cases) · [Prerequisites](#prerequisites) · [Build](#build) · [Test](#test) · [Run](#run) · [Quick start](#quick-start) · [Troubleshooting](#troubleshooting) · [Architecture](#architecture) · [Repository layout](#repository-layout) · [Version control/bug tracking/CI](#version-control-bug-tracking-and-ci) · [Team](#team)
 
@@ -11,7 +11,7 @@ These are the user flows wired from the app to Firebase. Follow the [Run](#run) 
 | Use case                                                       | Status                                                                                                                                                                                                                                                                                                   | How to see it work                                                                                                     |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Sign up/sign in, persist the session, and sign out             | **Operational.** The auth screen uses Firebase Authentication. Sign-up calls `ensureProfile` through `callApi`; the registered profile service writes through its repository to Firestore, subject to Firestore rules.                                                                                   | Start the local emulators and app below, create an account, and check Authentication and Firestore in the Emulator UI. |
-| Explore places, search recommendations, and open place details | **Operational.** Explore resolves cities, loads catalog/OSM places, ranks search results, and supports category and saved-only filters. Place details include active recommendations.                                                                                                                    | In Explore, search for a place or recommendation (for example, `jazz`), change category/saved filters, and open a pin. |
+| Explore places, search recommendations, and open place details | **Operational.** Explore loads the shared catalog, ranks search results, and supports category and saved-only filters. Importing or refreshing OSM cities is restricted to accounts with the trusted `catalogEditor` claim; all signed-in users can read seeded/imported places. Place details include active recommendations. | In Explore, search for a place or recommendation (for example, `jazz`), change category/saved filters, and open a pin. |
 | Save and unsave a place or recommendation                      | **Operational.** Explore and Saved use live Firestore-backed save services. Personal saved-place notes are not editable in the UI.                                                                                                                                                                       | Save a place or recommendation from Explore, then open Saved. Unsave from either screen.                               |
 | Browse recommendation postcards                                | **Operational.** The Postcards tab reads the live feed for the selected city; cards can be flipped and “See place” opens the matching Explore details. Saving a recommendation is available from the details view.                                                                                       | Open Postcards, choose a city, flip a card, tap See place, then inspect or save the recommendation.                    |
 | Follow contributors and browse their recommendations           | **Operational.** Signed-in users can follow/unfollow postcard authors; the Following feed includes only followed contributors' recommendations for the selected city. Users cannot follow themselves.                                                                                                    | Open Postcards, select Following, then follow or unfollow a contributor from a card.                                   |
@@ -121,7 +121,7 @@ Expected: **3 suites, 22 tests passing**.
 
 ### Backend emulator tests
 
-Expected: **7 suites, 170 tests passing**. The complete suite includes Firestore rules, recommendation/seed integration, and seed unit tests. It runs against local Auth and Firestore emulators; Java 21 or newer is required:
+Expected: **7 suites, 173 tests passing**. The complete suite includes Firestore rules, recommendation/seed integration, and seed unit tests. It runs against local Auth and Firestore emulators; Java 21 or newer is required:
 
 ```bash
 npx --yes firebase-tools@15.37.0 emulators:exec --only auth,firestore "npm --prefix backend run test:rules -- --runInBand --testTimeout=60000"
@@ -173,6 +173,16 @@ The app's live flows use local Firebase Authentication and Firestore emulators. 
    Press `i` for the iOS Simulator, or scan the QR code with the iPhone Camera app to open Expo Go. Use a Mac with Xcode for the Simulator.
 
 5. **Exercise the operational flows.** Create an account, then use Explore, Postcards, Itineraries, and Saved. In Postcards, flip a card and tap See place to open its Explore details; save it or add it to an itinerary. Explore and Saved also expose Add to itinerary for catalog places. Create an itinerary, choose a day and optionally a visit time for the place, then open the itinerary to view stops by day, set/change/clear times, move stops between days, or remove them. Saving and unsaving work in Explore and Saved. In the Emulator UI, inspect Authentication and Firestore to confirm the writes.
+
+   To test importing a city that is not already in the catalog, first create a user, copy its UID from the Auth Emulator UI, then grant the editor claim in another repository-root terminal:
+
+   ```bash
+   FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+     ROAMI_ADMIN_PROJECT_ID=roami-7c0bd \
+     npm --prefix backend run set-catalog-editor -- <user-uid> grant
+   ```
+
+   Sign out and back in so the app receives the updated token. Do not grant catalog editor access broadly in a real project; see [the city import guide](docs/city-import.md).
 
 To run against the team's real Firebase project instead, copy `mobile/.env.example` to `mobile/.env`, fill in its Firebase values from the team's [living document](https://docs.google.com/document/d/1Kz8SdI8w7-ivWgA3terH4hSaZwHyNAZs51WpcsMWDO0/edit?usp=sharing), leave `EXPO_PUBLIC_EMULATOR_HOST` empty, and use the intended API mode. Never commit `.env`.
 
@@ -231,7 +241,7 @@ Screen → callApi(name, request) → registered service → repository → Fire
 - **Shared types** in `shared/src/` define API requests/responses and data models.
 - **`firestore.rules`** enforces server-side access and write constraints.
 
-ESLint checks the intended layering; see [docs/coding-guidelines.md](docs/coding-guidelines.md). More developer references: [where code goes](docs/where-code-goes.md) and [shared models](docs/shared-models.md). The setup guides in `docs/mobile-app-setup.md` and `docs/firebase-setup.md` contain stale SDK, Node, or Functions instructions; use this README for current installation, emulator, and run steps.
+ESLint checks the intended layering; see [docs/coding-guidelines.md](docs/coding-guidelines.md). More developer references: [where code goes](docs/where-code-goes.md), [shared models](docs/shared-models.md), and [city import and catalog editor setup](docs/city-import.md). The setup guides in `docs/mobile-app-setup.md` and `docs/firebase-setup.md` contain stale SDK, Node, or Functions instructions; use this README for current installation, emulator, and run steps.
 
 Native map tiles, gestures, keyboard behavior, and tab/panel layout still need an iPhone or simulator check; browser review uses a labeled map substitute. Seattle is the seeded demo city; other cities rely on OpenStreetMap imports. Walking preferences are stored but do not produce or constrain routes. Profile editing, recommendation contribution, likes, comments, collections, blocks, and reports are not exposed as app features. Visits, personal place rankings, and private saved-place notes are available. Some itinerary validation lives in client code. Values bundled into a mobile app (including Firebase client configuration) are public; access control belongs in Firestore rules. Search caches each city's data for 60 seconds.
 

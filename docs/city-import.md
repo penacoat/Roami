@@ -52,15 +52,34 @@ To change the refresh period, change `REFRESH_DAYS` in `osmPlaces.ts` **and**
 
 ## Rules and their limits
 
-Signed-in users can create OSM places and `cityImports` records with a strict
-shape (OSM-style IDs, known categories, short names, valid coordinates, server
-timestamp). They can rewrite one only once it is older than 30 days, and can't
-move a place to another city. Nobody can delete places or change hand-made ones.
+Only accounts with the trusted `catalogEditor: true` Firebase Auth custom claim
+can create or refresh OSM places and city import records. Ordinary signed-in
+users can read the shared catalog but cannot publish fabricated records. Rules
+also require a strict shape (OSM-style IDs, known categories, short names,
+valid coordinates, server timestamp), prevent refreshing a place before 30
+days, and prevent moving a place to another city. Places cannot be deleted,
+and hand-made places cannot be changed by the app. A trusted operator can grant
+or revoke the claim with the Firebase Admin SDK:
 
-The rules can't check that a place really exists in OSM, so a signed-in user
-with their own script could add a made-up place. A Cloud Function import would
-close that gap but needs the Blaze (billing) plan. A future admin script could
-re-check a city against OSM and remove anything that doesn't match.
+```bash
+ROAMI_ADMIN_PROJECT_ID=<project-id> npm --prefix backend run set-catalog-editor -- <user-uid> grant
+ROAMI_ADMIN_PROJECT_ID=<project-id> npm --prefix backend run set-catalog-editor -- <user-uid> revoke
+```
+
+For the local Auth emulator, run the command while the emulator is active and
+set both variables (Admin SDK credentials are not required):
+
+```bash
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+ROAMI_ADMIN_PROJECT_ID=<project-id> \
+npm --prefix backend run set-catalog-editor -- <user-uid> grant
+```
+
+For a real Firebase project, omit `FIREBASE_AUTH_EMULATOR_HOST`, use authorized
+Application Default Credentials, and provide the explicit project ID. After
+the claim changes, the user must refresh their ID token (signing out and back
+in is sufficient). Rules still cannot verify that a record truly came from
+OSM, so grant this role only to trusted maintainers and review their imports.
 
 ## Usage limits
 
