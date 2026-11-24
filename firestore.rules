@@ -78,7 +78,7 @@ service cloud.firestore {
     }
 
     function validTrip(tripId, d) {
-      return d.keys().hasOnly(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'startingPoints', 'walkingLimit', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
+      return d.keys().hasOnly(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'startingPoints', 'walkingLimit', 'candidatePlaceIds', 'candidateRecommendationIds', 'revision', 'archivedAt', 'createdAt', 'updatedAt'])
         && d.keys().hasAll(['id', 'ownerId', 'city', 'startDate', 'endDate', 'dailyWindow', 'candidatePlaceIds', 'revision', 'createdAt', 'updatedAt'])
         && d.id == tripId
         && shortString(d.city, 100)
@@ -91,7 +91,11 @@ service cloud.firestore {
         && (!d.keys().hasAny(['startingPoints']) || validStartingPoints(d.startingPoints))
         && (!d.keys().hasAny(['walkingLimit']) || validWalkingLimit(d.walkingLimit))
         && d.candidatePlaceIds is list && d.candidatePlaceIds.size() <= 50
+        && (!('candidateRecommendationIds' in d) || (d.candidateRecommendationIds is map
+          && d.candidateRecommendationIds.keys().hasOnly(d.candidatePlaceIds)))
         && d.revision is int
+        && (d.get('archivedAt', null) == null
+            || (d.get('archivedAt', null) is string && d.get('archivedAt', '').size() <= 40))
         && d.createdAt is string && d.updatedAt is string;
     }
 

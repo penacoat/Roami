@@ -10,6 +10,8 @@ import type {
   ListTripsResponse,
   RemoveCandidateRequest,
   RemoveCandidateResponse,
+  SetTripArchivedRequest,
+  SetTripArchivedResponse,
   Trip,
   TripStop,
   TripStopView,
@@ -19,7 +21,7 @@ import type {
 
 import { ApiError } from '../api';
 import { getCurrentUserId } from '../auth/AuthService';
-import { MAX_CANDIDATES, validateNewTrip } from '../logic/trips';
+import { MAX_CANDIDATES, validateNewTrip, validateStopDetails } from '../logic/trips';
 import { getPlacesByIds } from '../repositories/PlaceRepository';
 import {
   createTrip as saveNewTrip,
@@ -153,6 +155,7 @@ export async function listTrips(request: ListTripsRequest): Promise<ListTripsRes
       endDate: trip.endDate,
       candidateCount: trip.candidatePlaceIds.filter((id) => !scheduled.has(id)).length,
       stopCount: stops.length,
+      ...(trip.archivedAt && { archivedAt: trip.archivedAt }),
       ...(request.includeScheduledPlaces && {
         scheduledPlaces: stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
       }),
@@ -160,6 +163,30 @@ export async function listTrips(request: ListTripsRequest): Promise<ListTripsRes
   });
   summaries.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id));
   return { trips: summaries };
+}
+
+/**
+ * Archives a trip, or brings an archived one back. Only the owner can. Nothing
+ * about the trip's plan changes; it just leaves or rejoins the main list.
+ */
+export async function setTripArchived(
+  request: SetTripArchivedRequest,
+): Promise<SetTripArchivedResponse> {
+  const userId = requireUserId();
+  const tripId = requireTripId(request.tripId);
+  if (typeof request.archived !== 'boolean') {
+    throw new ApiError('invalid-argument', 'Choose whether to archive or restore the trip.');
+  }
+  await saveTripChange(tripId, async (current): Promise<TripChange | null> => {
+    const trip = requireOwnedTrip(current, userId);
+    if (Boolean(trip.archivedAt) === request.archived) return null; // already so; save nothing
+    return {
+      trip: nextRevision(trip, {
+        archivedAt: request.archived ? new Date().toISOString() : null,
+      }),
+    };
+  });
+  return { trip: await loadTripView(tripId) };
 }
 
 /** A trip the user owns or that was shared with them (view-only). */
@@ -199,14 +226,29 @@ export async function addCandidate(request: AddCandidateRequest): Promise<AddCan
   const tripId = requireTripId(request.tripId);
   const placeId = requirePlaceId(request.placeId);
   const trip = await changeCandidates(tripId, async (current, placeExists) => {
-    if (current.candidatePlaceIds.includes(placeId)) return null; // already there; save nothing
-    if (current.candidatePlaceIds.length >= MAX_CANDIDATES) {
+    const previous = current.candidateRecommendationIds?.[placeId] ?? [];
+    const recommendationIds = [...new Set([...previous, ...(request.recommendationIds ?? [])])];
+    const details = validateStopDetails({ visitMinutes: 60, recommendationIds });
+    if (!details.ok) throw new ApiError('invalid-argument', details.error);
+    const exists = current.candidatePlaceIds.includes(placeId);
+    if (exists && recommendationIds.length === previous.length) return null;
+    if (!exists && current.candidatePlaceIds.length >= MAX_CANDIDATES) {
       throw new ApiError('invalid-argument', `A trip can have at most ${MAX_CANDIDATES} places.`);
     }
     if (!(await placeExists(placeId))) {
       throw new ApiError('not-found', 'That place is not in the catalog.');
     }
-    return nextRevision(current, { candidatePlaceIds: [...current.candidatePlaceIds, placeId] });
+    return nextRevision(current, {
+      candidatePlaceIds: exists
+        ? current.candidatePlaceIds
+        : [...current.candidatePlaceIds, placeId],
+      ...(recommendationIds.length > 0 && {
+        candidateRecommendationIds: {
+          ...current.candidateRecommendationIds,
+          [placeId]: recommendationIds,
+        },
+      }),
+    });
   });
   return { trip };
 }
@@ -220,6 +262,11 @@ export async function removeCandidate(
     if (!current.candidatePlaceIds.includes(placeId)) return null; // not there; save nothing
     return nextRevision(current, {
       candidatePlaceIds: current.candidatePlaceIds.filter((id) => id !== placeId),
+      ...(current.candidateRecommendationIds && {
+        candidateRecommendationIds: Object.fromEntries(
+          Object.entries(current.candidateRecommendationIds).filter(([id]) => id !== placeId),
+        ),
+      }),
     });
   });
   return { trip };

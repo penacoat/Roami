@@ -72,7 +72,19 @@ function toTrip(id: string, data: DocumentData): Trip {
     candidatePlaceIds: Array.isArray(data.candidatePlaceIds)
       ? data.candidatePlaceIds.map(String)
       : [],
+    ...(data.candidateRecommendationIds &&
+      typeof data.candidateRecommendationIds === 'object' && {
+        candidateRecommendationIds: Object.fromEntries(
+          Object.entries(data.candidateRecommendationIds).flatMap(([placeId, ids]) =>
+            Array.isArray(ids)
+              ? [[placeId, ids.filter((id): id is string => typeof id === 'string')]]
+              : [],
+          ),
+        ),
+      }),
     revision: Number(data.revision),
+    // Only archived trips have the field, so existing trips read exactly as before.
+    ...(typeof data.archivedAt === 'string' && { archivedAt: data.archivedAt }),
     createdAt: String(data.createdAt),
     updatedAt: String(data.updatedAt),
   };
@@ -118,7 +130,12 @@ function tripDocument(trip: Trip): DocumentData {
     })),
     walkingLimit: trip.walkingLimit,
     candidatePlaceIds: trip.candidatePlaceIds,
+    ...(trip.candidateRecommendationIds && {
+      candidateRecommendationIds: trip.candidateRecommendationIds,
+    }),
     revision: trip.revision,
+    // Written only while archived. Saving without it is how a trip is unarchived.
+    ...(trip.archivedAt ? { archivedAt: trip.archivedAt } : {}),
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,
   };

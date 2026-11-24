@@ -10,6 +10,7 @@ import type {
 
 import { ApiError } from '../api';
 import {
+  MAX_PLACES_PER_CITY,
   buildOverpassQuery,
   isCurrent,
   isStale,
@@ -85,47 +86,96 @@ function visiblePlaces(
 // One import per city at a time from this phone, even if the screen asks twice.
 const importsInFlight = new Map<string, Promise<PlaceSummary[]>>();
 
-/** Forgets imports in progress (used by tests). */
+// After the food download fails for a city, wait this long before asking
+// OpenStreetMap for it again, so reopening the city doesn't hammer a busy server.
+const FOOD_RETRY_MS = 10 * 60 * 1000;
+const foodRetryAfter = new Map<string, number>();
+
+/** Forgets imports in progress and retry timers (used by tests). */
 export function resetPlaceImports(): void {
   importsInFlight.clear();
+  foodRetryAfter.clear();
 }
+
+const toSummary = ({
+  id,
+  name,
+  city,
+  cityId,
+  latitude,
+  longitude,
+  category,
+  openingHours,
+  missingFields,
+}: PlaceSummary): PlaceSummary => ({
+  id,
+  name,
+  city,
+  cityId,
+  latitude,
+  longitude,
+  category,
+  openingHours,
+  missingFields,
+});
 
 /**
  * Downloads a city's places from OpenStreetMap and stores them: new places are
- * created and stale ones rewritten (planImport). The cityImports record is
- * written last, and only when both downloads worked, so if anything fails the
- * next visit tries again. Returns the places now stored for the city.
+ * created and stale ones rewritten (planImport). Returns the places now stored.
+ *
+ * Sights come first. Food and shops are a second download that is skipped when
+ * the sights already fill the city's place limit. If it fails (it can time out
+ * in a huge city), the sights are still saved and shown, but the city is not
+ * marked imported, so a later visit tries again. `resume` means an earlier
+ * attempt already saved the sights, so only food and shops are downloaded.
+ * The cityImports record is written last.
  */
 async function importCity(
   city: string,
   cityId: string,
   imported: StoredImportedPlace[],
+  resume: boolean,
 ): Promise<PlaceSummary[]> {
   const relationId = relationIdOf(cityId) as number;
   const now = Date.now();
-  let sights: unknown;
-  try {
-    sights = await fetchOverpass(buildOverpassQuery(relationId, 'sights'));
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`[places] Could not download sights in ${city} from OpenStreetMap`, error);
-    throw new ApiError(
-      'unavailable',
-      `Could not load places in ${city} from OpenStreetMap. Check your connection and try again.`,
-    );
+  const retrievedAt = new Date(now).toISOString();
+  const cityRef = { cityId, name: city };
+
+  let sights: unknown = null;
+  if (!resume) {
+    try {
+      sights = await fetchOverpass(buildOverpassQuery(relationId, 'sights'));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(`[places] Could not download sights in ${city} from OpenStreetMap`, error);
+      throw new ApiError(
+        'unavailable',
+        `Could not load places in ${city} from OpenStreetMap. Check your connection and try again.`,
+      );
+    }
   }
-  // Food and shops are a second, bigger download. If it fails (it can time out
-  // in a huge city), the sights are still saved and shown, and the city is
-  // not marked as imported, so the next visit tries again.
+  const sightCount = resume ? imported.length : parseOverpass(sights, cityRef, retrievedAt).length;
+
   let food: unknown = null;
-  try {
-    food = await fetchOverpass(buildOverpassQuery(relationId, 'food'));
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`[places] Could not download food and shops in ${city}; will retry`, error);
+  let complete = true;
+  if (sightCount < MAX_PLACES_PER_CITY) {
+    try {
+      food = await fetchOverpass(buildOverpassQuery(relationId, 'food'));
+      foodRetryAfter.delete(cityId);
+    } catch (error) {
+      complete = false;
+      foodRetryAfter.set(cityId, now + FOOD_RETRY_MS);
+      // eslint-disable-next-line no-console
+      console.warn(`[places] Could not download food and shops in ${city}; will retry`, error);
+    }
   }
-  const json = mergeOverpass(sights, food);
-  const fetched = parseOverpass(json, { cityId, name: city }, new Date(now).toISOString());
+
+  const fetched = parseOverpass(
+    mergeOverpass(sights, food),
+    cityRef,
+    retrievedAt,
+    MAX_PLACES_PER_CITY - (resume ? imported.length : 0),
+  );
   const existing = new Map(
     imported
       .filter((entry) => entry.importedAtMs !== null)
@@ -133,30 +183,32 @@ async function importCity(
   );
   const plan = planImport(fetched, existing, now);
   const written = await writeImportedPlaces([...plan.create, ...plan.update]);
-  if (food !== null) await saveCityImport({ cityId, name: city, placeCount: fetched.length });
+  if (complete) {
+    const placeCount = fetched.length + (resume ? imported.length : 0);
+    await saveCityImport({ cityId, name: city, placeCount });
+  }
 
   // Everything fetched is stored now: written just now, or left alone because
   // it was already fresh. A place someone else refused to let us write is left out.
-  const stored = fetched.filter((place) => written.has(place.id) || existing.has(place.id));
-  return stored.map(({ id, name, latitude, longitude, category, openingHours, missingFields }) => ({
-    id,
-    name,
-    latitude,
-    longitude,
-    category,
-    openingHours,
-    missingFields,
-  }));
+  const stored = fetched
+    .filter((place) => written.has(place.id) || existing.has(place.id))
+    .map(toSummary);
+  if (!resume) return stored;
+  const ids = new Set(stored.map((place) => place.id));
+  return [...imported.map((entry) => entry.place).filter((place) => !ids.has(place.id)), ...stored];
 }
 
 function importOnce(
   city: string,
   cityId: string,
   imported: StoredImportedPlace[],
+  resume: boolean,
 ): Promise<PlaceSummary[]> {
   const running = importsInFlight.get(cityId);
   if (running) return running;
-  const started = importCity(city, cityId, imported).finally(() => importsInFlight.delete(cityId));
+  const started = importCity(city, cityId, imported, resume).finally(() =>
+    importsInFlight.delete(cityId),
+  );
   importsInFlight.set(cityId, started);
   return started;
 }
@@ -195,12 +247,25 @@ export async function listPlaces(request: ListPlacesRequest): Promise<ListPlaces
   ]);
 
   if (!cityImport) {
-    const fresh = await importOnce(city, cityId, imported);
+    // Places already stored but no import record: an earlier attempt saved the
+    // sights and only the food download is missing. Don't ask again right after
+    // it failed, so a busy OpenStreetMap server isn't hit on every visit.
+    const resume = imported.length > 0;
+    if (resume && Date.now() < (foodRetryAfter.get(cityId) ?? 0)) {
+      return { places: visiblePlaces(manual, imported, null) };
+    }
+    const fresh = await importOnce(city, cityId, imported, resume).catch((error: unknown) => {
+      if (!resume) throw error;
+      // The retry failed; keep showing what is stored, and try again later.
+      // eslint-disable-next-line no-console
+      console.warn(`[places] Could not finish importing ${city}`, error);
+      return imported.map((entry) => entry.place);
+    });
     return { places: [...manual, ...withoutDuplicatesOf(fresh, manual)].sort(byName) };
   }
 
   if (isStale(cityImport.importedAtMs, Date.now())) {
-    importOnce(city, cityId, imported).catch((error: unknown) => {
+    importOnce(city, cityId, imported, false).catch((error: unknown) => {
       // The stored places are still shown; the next visit tries again.
       // eslint-disable-next-line no-console
       console.warn(`[places] Background refresh of ${city} failed`, error);

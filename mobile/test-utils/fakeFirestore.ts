@@ -204,7 +204,26 @@ function checkWrite(
       if (previous?.ownerId !== uid) throw deny('only the owner can delete a trip');
       return;
     }
-    if (!sameKeys(next, TRIP_FIELDS)) throw deny(`trip fields ${Object.keys(next).join(',')}`);
+    const { candidateRecommendationIds, archivedAt, ...core } = next;
+    if (!sameKeys(core, TRIP_FIELDS)) throw deny(`trip fields ${Object.keys(next).join(',')}`);
+    if (
+      candidateRecommendationIds !== undefined &&
+      (candidateRecommendationIds === null ||
+        typeof candidateRecommendationIds !== 'object' ||
+        Array.isArray(candidateRecommendationIds) ||
+        Object.keys(candidateRecommendationIds).some(
+          (key) => !(next.candidatePlaceIds as string[]).includes(key),
+        ))
+    )
+      throw deny('candidate sources must belong to trip suggestions');
+    // archivedAt is the one other optional field: a short string, or null.
+    if (
+      archivedAt !== undefined &&
+      archivedAt !== null &&
+      !(typeof archivedAt === 'string' && archivedAt.length <= 40)
+    ) {
+      throw deny('archivedAt must be a short string or null');
+    }
     if (next.id !== id) throw deny('trip id must match the document ID');
     const startingPoints = next.startingPoints;
     if (!Array.isArray(startingPoints) || startingPoints.length > 5) {

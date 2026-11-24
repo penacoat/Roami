@@ -26,6 +26,7 @@ import { MAX_STOPS_PER_DAY } from '../logic/trips';
 import { dateKey, tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
 import { itineraryStyles as styles } from '../trips/itineraryStyles';
+import { PageSignature } from '../design/PageSignature';
 import {
   DEFAULT_END,
   DEFAULT_START,
@@ -47,7 +48,7 @@ export function ItineraryScreen({
   tripId: string;
   onBack: () => void;
   onExplore: () => void;
-  onOpenPlace: (placeId: string) => void;
+  onOpenPlace: (placeId: string, recommendationId?: string) => void;
 }) {
   const [view, setView] = useState<TripView | null>(null);
   const [loadedKey, setLoadedKey] = useState('');
@@ -348,6 +349,7 @@ export function ItineraryScreen({
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        <PageSignature title="Itinerary" />
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.button}>
           <Text style={styles.buttonText}>← Itineraries</Text>
         </Pressable>
@@ -374,6 +376,11 @@ export function ItineraryScreen({
             <Text style={styles.muted}>
               {formatDate(view.trip.startDate)} – {formatDate(view.trip.endDate)}
             </Text>
+            {view.trip.archivedAt ? (
+              <Text style={styles.muted}>
+                Archived. It is out of your main list until you unarchive it.
+              </Text>
+            ) : null}
             {canEdit && (
               <>
                 <Pressable
@@ -587,7 +594,7 @@ export function ItineraryScreen({
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Open ${stop.place.name}`}
-                            onPress={() => onOpenPlace(stop.place!.id)}
+                            onPress={() => onOpenPlace(stop.place!.id, stop.recommendationIds[0])}
                           >
                             <Text style={styles.text}>
                               {stop.order}. {stop.place.name}
@@ -922,6 +929,27 @@ export function ItineraryScreen({
                 disabled={pending || dragging}
                 onBusy={setPhotosBusy}
               />
+            )}
+            {canEdit && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={pending || dragging || photosBusy}
+                onPress={() => {
+                  const archiving = !view.trip.archivedAt;
+                  void change(
+                    () => callApi('setTripArchived', { tripId, archived: archiving }),
+                    archiving
+                      ? 'Could not archive this itinerary. Try again.'
+                      : 'Could not unarchive this itinerary. Try again.',
+                    archiving ? 'Itinerary archived.' : 'Itinerary is back in your main list.',
+                  );
+                }}
+                style={[styles.button, { alignSelf: 'flex-start' }]}
+              >
+                <Text style={styles.buttonText}>
+                  {view.trip.archivedAt ? 'Unarchive itinerary' : 'Archive itinerary'}
+                </Text>
+              </Pressable>
             )}
             {canEdit && (
               <Pressable

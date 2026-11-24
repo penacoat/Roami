@@ -95,6 +95,13 @@ describe('city IDs', () => {
     expect(food).toContain('restaurant');
     expect(food).not.toContain('museum');
   });
+  it('keeps the food query light: no relations, a smaller cap', () => {
+    const food = buildOverpassQuery(186579, 'food');
+    expect(food).toContain('nw["amenity"');
+    expect(food).not.toContain('nwr');
+    expect(food).toContain('out center tags 800;');
+    expect(buildOverpassQuery(186579, 'sights')).toContain('nwr["tourism"');
+  });
   it('merges the two answers, ignoring a missing one', () => {
     expect(mergeOverpass({ elements: [1] }, null, { elements: [2, 3] })).toEqual({
       elements: [1, 2, 3],
@@ -231,6 +238,12 @@ describe('parseOverpass', () => {
     expect(places).toHaveLength(MAX_PLACES_PER_CITY);
     expect(places[0].name).toBe('Zoo');
     expect(places[1].name).toBe('Big Park');
+  });
+
+  it('can be asked for fewer places than the city limit', () => {
+    const elements = [1, 2, 3].map((i) => node(i, { name: `Museum ${i}`, tourism: 'museum' }));
+    expect(parseOverpass({ elements }, PORTLAND, AT, 2)).toHaveLength(2);
+    expect(parseOverpass({ elements }, PORTLAND, AT, 0)).toEqual([]);
   });
 
   it('returns nothing for an answer without elements', () => {

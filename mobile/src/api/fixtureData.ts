@@ -1,5 +1,6 @@
 // SAMPLE DATA ONLY. Names are real Seattle places, but the hours, descriptions,
 // and authors are made up so the UI has something to show.
+import { PLACE_PHOTOS } from '../components/recommendations/placePhotos';
 import type { PlaceSummary, PublicUser, RecommendationView } from '@roami/shared';
 
 export const ME: PublicUser = {
@@ -29,10 +30,12 @@ const place = (
 ): PlaceSummary => ({
   id,
   name,
+  city: 'Seattle',
   latitude,
   longitude,
   category,
   openingHours,
+  photos: PLACE_PHOTOS[id] ? [{ url: PLACE_PHOTOS[id], illustrative: true }] : [],
   missingFields: openingHours === null ? ['openingHours'] : [],
 });
 

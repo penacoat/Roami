@@ -1,13 +1,13 @@
-import { Platform } from 'react-native';
+import { fonts, palette } from '../design/tokens';
 
 export const tripTheme = {
-  paper: '#F3EEE2',
-  card: '#FCFAF4',
-  ink: '#283A70',
-  text: '#27334E',
-  muted: '#505A72',
-  line: '#DFD7C5',
-  accent: '#A83E28',
+  paper: palette.paper,
+  card: palette.card,
+  ink: palette.primary,
+  text: palette.ink,
+  muted: palette.muted,
+  line: palette.line,
+  accent: palette.red,
   butter: '#EADFAD',
-  serif: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
+  serif: fonts.serif,
 };

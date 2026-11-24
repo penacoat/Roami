@@ -1,5 +1,6 @@
 import type {
   PlaceId,
+  PlacePhoto,
   KnownCost,
   RecommendationId,
   StartingPoint,
@@ -31,6 +32,16 @@ export interface AuthorSummary {
   name: string;
 }
 
+export interface CityLocation {
+  id: string;
+  name: string;
+  region: string;
+  country: string;
+  cityId?: string; // OSM boundary, resolved only after a city is selected.
+  latitude: number;
+  longitude: number;
+}
+
 /** A city the user can pick, from OpenStreetMap's geocoder. */
 export interface CityMatch {
   cityId: string; // "osm-relation-<id>"
@@ -43,10 +54,17 @@ export interface CityMatch {
 export interface PlaceSummary {
   id: PlaceId;
   name: string;
+  city?: string; // Older catalog records may not include a city.
+  cityId?: string;
   latitude: number;
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not closed
+  openingHoursSource?: { url: string; checkedAt: string }; // reviewed source URL and YYYY-MM-DD snapshot date
+  photos?: PlacePhoto[];
+  address?: string | null;
+  website?: string | null;
+  ticketUrl?: string | null;
   cost?: KnownCost;
   missingFields: string[];
 }
@@ -88,6 +106,8 @@ export interface TripSummary {
   endDate: string;
   candidateCount: number;
   stopCount: number;
+  /** Set only for archived trips. */
+  archivedAt?: string;
   scheduledPlaces?: { placeId: string; day: number }[];
 }
 

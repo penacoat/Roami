@@ -7,6 +7,14 @@ import ItinerariesRoute from '../src/app/(tabs)/trip';
 import ItineraryRoute from '../src/app/itinerary/[tripId]';
 import NewTripRoute from '../src/app/new-trip';
 
+jest.mock('../src/cities/citySearch', () => ({
+  searchCities: async ({ query }: { query: string }) => ({
+    cities: (require('../test-utils/cities').testCities as { name: string }[]).filter(
+      (city) => city.name.toLowerCase() === query.trim().toLowerCase(),
+    ),
+  }),
+}));
+
 jest.mock('../src/auth/AuthService', () => ({ signOut: jest.fn() }));
 jest.mock('../src/trips/ItineraryMap', () => ({ ItineraryMap: () => null }));
 jest.mock('@react-native-community/datetimepicker', () =>
@@ -41,7 +49,11 @@ it('creates two trips in succession through the itinerary routes and can reopen 
   const tripIds = new Set<unknown>();
   for (const city of ['Seattle', 'Portland']) {
     await fireEvent.press(await screen.findByRole('button', { name: 'New itinerary' }));
-    await fireEvent.press(await screen.findByRole('button', { name: city }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Choose city' }));
+    await fireEvent.changeText(screen.getByLabelText('City name'), city);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: new RegExp('^Select city: ' + city) }),
+    );
     await fireEvent.press(screen.getByRole('button', { name: date }));
     await fireEvent.press(screen.getByRole('button', { name: date }));
     const creating = fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));

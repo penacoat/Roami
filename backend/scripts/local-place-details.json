@@ -1,0 +1,31 @@
+{
+  "p-sam": {
+    "openingHours": "Wed, Fri–Sun 10 am–5 pm\nThu 10 am–8 pm · Mon–Tue closed\n2026 holidays: Nov 26 & Dec 25 closed; Dec 24 & 31 close at 3 pm.",
+    "openingHoursSource": {
+      "url": "https://www.seattleartmuseum.org/visit/seattle-art-museum",
+      "checkedAt": "2026-11-22"
+    },
+    "website": "https://www.seattleartmuseum.org/visit/seattle-art-museum",
+    "address": "1300 First Avenue, Seattle, WA 98101"
+  },
+  "p-chihuly": {
+    "openingHours": "Nov 22–28, 2026\nSun–Wed 10 am–5 pm · Thu closed\nFri 10 am–5:30 pm · Sat 10 am–6 pm\nOther dates and event closures: check the venue website.",
+    "openingHoursSource": {
+      "url": "https://www.chihulygardenandglass.com/visit/plan-your-visit",
+      "checkedAt": "2026-11-22"
+    },
+    "website": "https://www.chihulygardenandglass.com/visit/plan-your-visit",
+    "ticketUrl": "https://www.chihulygardenandglass.com/buy-tickets",
+    "address": "305 Harrison St., Seattle, WA"
+  },
+  "p-jazz": {
+    "openingHours": "Tue–Sun; some Mondays\nDoors from 5:30 pm; check your selected show for entry time.",
+    "openingHoursSource": {
+      "url": "https://www.jazzalley.com/www-home/faq.jsp",
+      "checkedAt": "2026-11-22"
+    },
+    "website": "https://www.jazzalley.com/",
+    "ticketUrl": "https://www.jazzalley.com/www-home/calendar.jsp",
+    "address": "2033 6th Avenue, Seattle, WA"
+  }
+}

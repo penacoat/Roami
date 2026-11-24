@@ -33,23 +33,29 @@ jobs:
   backend:
     name: Backend build and emulator tests
     runs-on: ubuntu-latest
-
+    env:
+      METADATA_SERVER_DETECTION: none
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - uses: actions/setup-java@v4
+          cache-dependency-path: |
+            backend/package-lock.json
+            mobile/package-lock.json
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: 21
+      # Backend integration tests import mobile services and their Firebase SDK.
+      - name: Install mobile service dependencies
+        run: npm --prefix mobile ci
       - name: Install backend dependencies
         run: npm --prefix backend ci
       - name: Build backend
         run: npm --prefix backend run build
-      - name: Test with Firebase emulators
+      - name: Firestore rules and backend tests
         run: >-
-          npx --yes firebase-tools emulators:exec --only auth,firestore
-          "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm --prefix backend run test:rules -- --runInBand --testTimeout=60000"
+          npx --yes firebase-tools@15.37.0 emulators:exec --only auth,firestore
+          "npm --prefix backend run test:rules -- --runInBand --testTimeout=60000"

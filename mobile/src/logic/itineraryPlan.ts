@@ -92,7 +92,7 @@ export function planItinerary(
         tripId: trip.id,
         placeId,
         title: null,
-        recommendationIds: [],
+        recommendationIds: [...(trip.candidateRecommendationIds?.[placeId] ?? [])],
         day: index + 1,
         order: day.length + 1,
         startTime: timeFromMinutes(slot),

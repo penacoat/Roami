@@ -321,6 +321,30 @@ const trip = (uid: string, id: string, revision: number) => ({
   candidatePlaceIds: [] as string[], revision, createdAt: now, updatedAt: now,
 });
 
+describe("trip suggestion recommendation sources", () => {
+  it("allows the owner to retain sources for a trip suggestion", async () => {
+    await assertSucceeds(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidatePlaceIds: ["p1"],
+      candidateRecommendationIds: {p1: ["r1", "r2"]},
+    }));
+    await assertFails(getDoc(doc(as("bob"), "trips/sources")));
+    await assertFails(updateDoc(doc(as("bob"), "trips/sources"), {
+      revision: 2, candidateRecommendationIds: {p1: ["r3"]},
+    }));
+  });
+  it("rejects sources for a place that is not a trip suggestion", async () => {
+    await assertFails(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidatePlaceIds: ["p1"],
+      candidateRecommendationIds: {p2: ["r1"]},
+    }));
+  });
+  it("requires the optional source collection to be a map", async () => {
+    await assertFails(setDoc(doc(as("alice"), "trips/sources"), {
+      ...trip("alice", "sources", 1), candidateRecommendationIds: ["r1"],
+    }));
+  });
+});
+
 const stop = (id: string, tripId: string, placeId: string | null) => ({
   id, tripId, placeId, title: placeId ? null : "Dinner reservation",
   recommendationIds: [] as string[], day: 1, order: 1, startTime: null,
@@ -429,6 +453,48 @@ describe("trips: who can write and how", () => {
     await seed("trips/t1", trip("alice", "t1", 1));
     await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
     await assertFails(updateDoc(doc(as("bob"), "trips/t1"), {revision: 2}));
+  });
+  it("lets the owner archive a trip and bring it back", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    const archivedAt = "2026-11-22T12:00:00.000Z";
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt}),
+    );
+    // Unarchiving saves the trip without the field.
+    await assertSucceeds(setDoc(doc(as("alice"), "trips/t1"), trip("alice", "t1", 3)));
+  });
+  it("keeps an archived trip readable by its owner and viewers", async () => {
+    await seed("trips/t1", {...trip("alice", "t1", 2), archivedAt: "2026-11-22T12:00:00.000Z"});
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    await assertSucceeds(getDoc(doc(as("alice"), "trips/t1")));
+    await assertSucceeds(getDoc(doc(as("bob"), "trips/t1")));
+  });
+  it("blocks archiving without raising the revision", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(
+      updateDoc(doc(as("alice"), "trips/t1"), {archivedAt: "2026-11-22T12:00:00.000Z"}),
+    );
+  });
+  it("blocks anyone but the owner from archiving a trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await seed("tripShares/t1", {tripId: "t1", viewerIds: ["bob"]});
+    const archived = {...trip("alice", "t1", 2), archivedAt: "2026-11-22T12:00:00.000Z"};
+    await assertFails(setDoc(doc(as("bob"), "trips/t1"), archived));
+    await assertFails(setDoc(doc(as("carol"), "trips/t1"), archived));
+  });
+  it("accepts only a short string or null for archivedAt", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: 5}));
+    await assertFails(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: "x".repeat(41)}),
+    );
+    await assertSucceeds(
+      setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archivedAt: null}),
+    );
+  });
+  it("still blocks unknown fields on a trip", async () => {
+    await seed("trips/t1", trip("alice", "t1", 1));
+    await assertFails(setDoc(doc(as("alice"), "trips/t1"), {...trip("alice", "t1", 2), archived: true}));
   });
   it("lets only the owner delete a trip", async () => {
     await seed("trips/t1", trip("alice", "t1", 1));

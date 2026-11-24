@@ -447,3 +447,17 @@ it('records a known cost and a dated booking checklist item', async () => {
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Buy tickets' }));
   expect(await screen.findByRole('checkbox', { name: 'Buy tickets', checked: true })).toBeChecked();
 });
+
+it('archives and unarchives a trip from its own screen', async () => {
+  const tripId = await tripWithTwoStops();
+  await show(tripId);
+  await fireEvent.press(screen.getByRole('button', { name: 'Archive itinerary' }));
+  await screen.findByText('Itinerary archived.');
+  expect(screen.getByText(/^Archived\. It is out of your main list/)).toBeTruthy();
+  expect((await callApi('getTrip', { tripId })).trip.trip.archivedAt).toEqual(expect.any(String));
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Unarchive itinerary' }));
+  await screen.findByText('Itinerary is back in your main list.');
+  expect(screen.queryByText(/^Archived\. It is out of your main list/)).toBeNull();
+  expect((await callApi('getTrip', { tripId })).trip.trip.archivedAt ?? null).toBeNull();
+});

@@ -318,3 +318,86 @@ describe('listPlaces', () => {
     expect(places.map((p) => p.id)).toEqual(['p-pike', 'osm-node-2']);
   });
 });
+
+describe('food and shops download', () => {
+  const food = (...names: string[]) => ({
+    elements: names.map((name, i) => ({
+      type: 'node',
+      id: 5000 + i,
+      lat: 45.5,
+      lon: -122.6,
+      tags: { name, amenity: 'restaurant' },
+    })),
+  });
+  const aMuseum = (id: number) => ({
+    place: summary(`osm-node-${id}`, `Museum ${id}`),
+    importedAtMs: NOW - DAY,
+  });
+
+  it('skips the food download when the sights already fill the city', async () => {
+    const names = Array.from({ length: 400 }, (_, i) => `Museum ${i + 1}`);
+    mocked.fetchOverpass.mockResolvedValue(overpass(...names));
+    const { places } = await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(1);
+    expect(places).toHaveLength(400);
+    expect(mocked.saveCityImport).toHaveBeenCalledWith({
+      cityId: PORTLAND,
+      name: 'Portland',
+      placeCount: 400,
+    });
+  });
+
+  it('downloads only food after an attempt that saved the sights but not the food', async () => {
+    mocked.listImportedPlaces.mockResolvedValue([aMuseum(1), aMuseum(2)]);
+    mocked.fetchOverpass.mockResolvedValue(food('Diner'));
+    const { places } = await listPlaces({ city: 'Portland', cityId: PORTLAND });
+
+    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(1);
+    expect(mocked.fetchOverpass.mock.calls[0][0]).toContain('restaurant');
+    expect(mocked.writeImportedPlaces.mock.calls[0][0].map((p) => p.id)).toEqual(['osm-node-5000']);
+    expect(mocked.saveCityImport).toHaveBeenCalledWith({
+      cityId: PORTLAND,
+      name: 'Portland',
+      placeCount: 3,
+    });
+    expect(places.map((p) => p.name)).toEqual(['Diner', 'Museum 1', 'Museum 2']);
+  });
+
+  it('keeps the stored sights and marks nothing done when the retry fails too', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocked.listImportedPlaces.mockResolvedValue([aMuseum(1), aMuseum(2)]);
+    mocked.fetchOverpass.mockRejectedValue(new Error('HTTP 504'));
+    const { places } = await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(places.map((p) => p.id)).toEqual(['osm-node-1', 'osm-node-2']);
+    expect(mocked.saveCityImport).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('waits 10 minutes before asking for food again after it failed', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const now = jest.spyOn(Date, 'now');
+    // First visit: the sights download, the food download fails.
+    mocked.fetchOverpass.mockImplementation(async (query) => {
+      if (query.includes('restaurant')) throw new Error('HTTP 504');
+      return overpass('Art Museum');
+    });
+    await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(2);
+
+    // Reopened soon after: the sights are stored now, and OSM is left alone.
+    mocked.listImportedPlaces.mockResolvedValue([aMuseum(1)]);
+    mocked.fetchOverpass.mockClear();
+    now.mockReturnValue(NOW + 5 * 60 * 1000);
+    const soon = await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(mocked.fetchOverpass).not.toHaveBeenCalled();
+    expect(soon.places.map((p) => p.id)).toEqual(['osm-node-1']);
+
+    // Reopened after the wait: only the food is asked for, and then the city is done.
+    mocked.fetchOverpass.mockResolvedValue(food('Diner'));
+    now.mockReturnValue(NOW + 11 * 60 * 1000);
+    await listPlaces({ city: 'Portland', cityId: PORTLAND });
+    expect(mocked.fetchOverpass).toHaveBeenCalledTimes(1);
+    expect(mocked.saveCityImport).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});

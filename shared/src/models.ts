@@ -53,6 +53,12 @@ export interface User {
   createdAt: string;
 }
 
+export interface PlacePhoto {
+  url: string;
+  attribution?: string;
+  illustrative?: boolean;
+}
+
 // 9. Place data (catalog)
 export interface Place {
   id: PlaceId;
@@ -65,6 +71,11 @@ export interface Place {
   longitude: number;
   category: string;
   openingHours: string | null; // null means unknown, not "closed"
+  openingHoursSource?: { url: string; checkedAt: string }; // reviewed source URL and YYYY-MM-DD snapshot date
+  photos?: PlacePhoto[];
+  address?: string | null;
+  website?: string | null;
+  ticketUrl?: string | null;
   cost?: KnownCost;
   missingFields: string[]; // e.g. ["openingHours"]
   source: DataSource;
@@ -170,7 +181,10 @@ export interface Trip {
   startingPoints: StartingPoint[];
   walkingLimit: WalkingLimit | null;
   candidatePlaceIds: PlaceId[]; // candidates are not scheduled until they become stops
+  candidateRecommendationIds?: Record<PlaceId, RecommendationId[]>; // sources retained through planning
   revision: number; // increases on every saved change, to detect outdated edits
+  /** When the owner archived the trip. Missing or null means it is active. */
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

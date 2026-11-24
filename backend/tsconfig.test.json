@@ -3,6 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "target": "ES2022",
+    "lib": ["es2022"],
     "types": ["jest", "node"],
     "rootDir": "..",
     "baseUrl": ".",

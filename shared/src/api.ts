@@ -11,6 +11,7 @@ import type {
   WalkingLimit,
 } from './models';
 import type {
+  CityLocation,
   CityMatch,
   PlaceSummary,
   PublicUser,
@@ -64,6 +65,13 @@ export interface UpdateProfileResponse {
 
 // ---------- Discovery and map ----------
 
+export interface SearchCitiesRequest {
+  query: string;
+}
+export interface SearchCitiesResponse {
+  cities: CityLocation[];
+}
+
 /** Turns what the user typed into cities to choose from. Call once on submit, not per keystroke. */
 export interface ResolveCityRequest {
   query: string;
@@ -100,9 +108,13 @@ export interface GetFeedRequest {
   cityId?: string;
   limit?: number;
   followingOnly?: boolean;
+  /** The `nextCursor` from the previous page. Leave it out to get the newest. */
+  cursor?: string;
 }
 export interface GetFeedResponse {
   items: RecommendationView[];
+  /** Pass this as `cursor` to get the next page. Null or missing means there are no more. */
+  nextCursor?: string | null;
 }
 
 export interface GetFollowingResponse {
@@ -180,11 +192,32 @@ export interface UpdateSavedNoteResponse {
   saved: SavedPlaceView;
 }
 
+export interface RemoveSavedRecommendationRequest {
+  placeId: PlaceId;
+  recommendationId: RecommendationId;
+}
+
 export interface RemoveSavedPlaceRequest {
   placeId: PlaceId;
 }
 export interface RemoveSavedPlaceResponse {
   removed: true;
+}
+
+/**
+ * Puts back a place that was just removed (the Undo button), with its original
+ * save date, note, and recommendation sources. Sources that are no longer
+ * available are dropped. If the place was saved again in the meantime, the two
+ * are merged and nothing already saved is overwritten.
+ */
+export interface RestoreSavedPlaceRequest {
+  placeId: PlaceId;
+  recommendationIds: RecommendationId[];
+  personalNote: string;
+  createdAt: string;
+}
+export interface RestoreSavedPlaceResponse {
+  saved: SavedPlaceView;
 }
 
 // ---------- Trips ----------
@@ -208,6 +241,18 @@ export interface ListTripsResponse {
   trips: TripSummary[];
 }
 
+/**
+ * Archives a finished trip (hides it from the main list) or brings it back.
+ * Owner only. Does not need expectedRevision. Doing it twice is harmless.
+ */
+export interface SetTripArchivedRequest {
+  tripId: TripId;
+  archived: boolean;
+}
+export interface SetTripArchivedResponse {
+  trip: TripView;
+}
+
 export interface GetTripRequest {
   tripId: TripId;
 }
@@ -224,6 +269,7 @@ export interface DeleteTripRequest {
 export interface AddCandidateRequest {
   tripId: TripId;
   placeId: PlaceId;
+  recommendationIds?: RecommendationId[];
 }
 export interface AddCandidateResponse {
   trip: TripView;
@@ -340,9 +386,23 @@ export interface PlaceJournalResponse {
  * this so a call like callApi('savePlace', {...}) is type-checked end to end.
  */
 export interface ApiContract {
-  ensureProfile: { request: EnsureProfileRequest; response: EnsureProfileResponse };
+  removeSavedRecommendation: {
+    request: RemoveSavedRecommendationRequest;
+    response: SavePlaceResponse;
+  };
+  searchCities: {
+    request: SearchCitiesRequest;
+    response: SearchCitiesResponse;
+  };
+  ensureProfile: {
+    request: EnsureProfileRequest;
+    response: EnsureProfileResponse;
+  };
   getProfile: { request: GetProfileRequest; response: GetProfileResponse };
-  updateProfile: { request: UpdateProfileRequest; response: UpdateProfileResponse };
+  updateProfile: {
+    request: UpdateProfileRequest;
+    response: UpdateProfileResponse;
+  };
   resolveCity: { request: ResolveCityRequest; response: ResolveCityResponse };
   listPlaces: { request: ListPlacesRequest; response: ListPlacesResponse };
   getPlace: { request: GetPlaceRequest; response: GetPlaceResponse };
@@ -362,14 +422,25 @@ export interface ApiContract {
   listSavedPlaces: { request: ListSavedPlacesRequest; response: ListSavedPlacesResponse };
   updateSavedNote: { request: UpdateSavedNoteRequest; response: UpdateSavedNoteResponse };
   removeSavedPlace: { request: RemoveSavedPlaceRequest; response: RemoveSavedPlaceResponse };
+  restoreSavedPlace: { request: RestoreSavedPlaceRequest; response: RestoreSavedPlaceResponse };
   createTrip: { request: CreateTripRequest; response: CreateTripResponse };
   listTrips: { request: ListTripsRequest; response: ListTripsResponse };
+  setTripArchived: { request: SetTripArchivedRequest; response: SetTripArchivedResponse };
   getTrip: { request: GetTripRequest; response: GetTripResponse };
   deleteTrip: { request: DeleteTripRequest; response: { deleted: true } };
-  addCandidate: { request: AddCandidateRequest; response: AddCandidateResponse };
-  removeCandidate: { request: RemoveCandidateRequest; response: RemoveCandidateResponse };
+  addCandidate: {
+    request: AddCandidateRequest;
+    response: AddCandidateResponse;
+  };
+  removeCandidate: {
+    request: RemoveCandidateRequest;
+    response: RemoveCandidateResponse;
+  };
   addStop: { request: AddStopRequest; response: AddStopResponse };
-  addFixedActivity: { request: AddFixedActivityRequest; response: AddStopResponse };
+  addFixedActivity: {
+    request: AddFixedActivityRequest;
+    response: AddStopResponse;
+  };
   applyItinerary: { request: ApplyItineraryRequest; response: AddStopResponse };
   moveStop: { request: MoveStopRequest; response: MoveStopResponse };
   removeStop: { request: RemoveStopRequest; response: RemoveStopResponse };

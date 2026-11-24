@@ -4,7 +4,8 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test:rules": "jest",
-    "seed": "npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node lib/scripts/seed.js"
+    "seed": "npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node lib/scripts/seed.js",
+    "seed:hours:local": "node scripts/load-local-place-details.mjs"
   },
   "engines": {
     "node": "24"

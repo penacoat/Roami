@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { ApiError, callApi } from '../api';
+import { placeActionStyles } from './placeActionStyles';
+import { ActionIcon } from '../design/ActionIcon';
 import { DEFAULT_VISIT_MINUTES, MAX_STOPS_PER_DAY } from '../logic/trips';
 import { tripDays, formatDate } from '../trips/tripDraft';
 import { itineraryDayLabel } from '../trips/itineraryDayLabel';
@@ -23,10 +25,14 @@ import { TimeRangePicker } from '../trips/TimeRangePicker';
 
 export function AddToItinerary({
   place,
+  recommendationIds = [],
+  compact = false,
   target,
   onChanged,
 }: {
   place: PlaceSummary;
+  recommendationIds?: string[];
+  compact?: boolean;
   target?: { tripId: string; day: number };
   onChanged?: (trip: TripView) => void;
 }) {
@@ -54,7 +60,7 @@ export function AddToItinerary({
           if (active) setSelected(trip);
         })
       : callApi('listTrips', { includeScheduledPlaces: true }).then(({ trips: items }) => {
-          if (active) setTrips(items);
+          if (active) setTrips(items.filter((trip) => !trip.archivedAt));
         });
     load
       .catch(() => {
@@ -73,6 +79,11 @@ export function AddToItinerary({
   const existing = selected?.stops.find((stop) => stop.placeId === place.id);
   const duplicate = Boolean(existing);
   const suggested = selected?.candidates.some((item) => item.id === place.id);
+  const suggestionSaved =
+    suggested &&
+    recommendationIds.every((id) =>
+      selected?.trip.candidateRecommendationIds?.[place.id]?.includes(id),
+    );
   const full = stops.length >= MAX_STOPS_PER_DAY;
   const draftTime = timed ? rangeFromMinutes(start, end) : null;
 
@@ -96,7 +107,11 @@ export function AddToItinerary({
     setPending(true);
     setError('');
     try {
-      const selection = { tripId: selected.trip.id, placeId: place.id };
+      const selection = {
+        tripId: selected.trip.id,
+        placeId: place.id,
+        recommendationIds: [...new Set(recommendationIds)],
+      };
       const result = times
         ? await callApi('addStop', {
             ...selection,
@@ -143,7 +158,7 @@ export function AddToItinerary({
         accessibilityLabel={
           target ? `Plan ${place.name} for Day ${target.day}` : `Add ${place.name} to an itinerary`
         }
-        style={styles.button}
+        style={compact ? placeActionStyles.button : styles.button}
         onPress={() => {
           setLoading(true);
           setSelected(null);
@@ -158,7 +173,12 @@ export function AddToItinerary({
           setOpen(true);
         }}
       >
-        <Text style={styles.buttonText}>{target ? place.name : 'Add to itinerary'}</Text>
+        <View style={placeActionStyles.label}>
+          {!target && <ActionIcon name="plus" />}
+          <Text style={compact ? placeActionStyles.text : styles.buttonText}>
+            {target ? place.name : compact ? 'Itinerary' : 'Add to itinerary'}
+          </Text>
+        </View>
       </Pressable>
       <Modal
         visible={open}
@@ -332,13 +352,17 @@ export function AddToItinerary({
                 {!duplicate && (
                   <Pressable
                     accessibilityRole="button"
-                    disabled={pending || suggested}
-                    accessibilityState={{ disabled: pending || suggested }}
+                    disabled={pending || suggestionSaved}
+                    accessibilityState={{ disabled: pending || suggestionSaved }}
                     onPress={() => void add('candidate')}
-                    style={[styles.button, (pending || suggested) && styles.disabled]}
+                    style={[styles.button, (pending || suggestionSaved) && styles.disabled]}
                   >
                     <Text style={styles.buttonText}>
-                      {suggested ? 'Already a trip suggestion' : 'Save as a trip suggestion'}
+                      {suggestionSaved
+                        ? 'Already a trip suggestion'
+                        : suggested
+                          ? 'Keep this tip with the suggestion'
+                          : 'Save as a trip suggestion'}
                     </Text>
                   </Pressable>
                 )}

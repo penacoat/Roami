@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { ApiError } from '../src/api';
 import {
+  removeSavedRecommendation,
   listSavedPlaces,
   removeSavedPlace,
+  restoreSavedPlace,
   savePlace,
   updateSavedNote,
 } from '../src/services/SaveService';
@@ -170,5 +172,76 @@ describe('removeSavedPlace', () => {
     await expect(removeSavedPlace({ placeId: 'p-sam' })).resolves.toEqual({ removed: true });
     expect(fake.all('savedPlaces')).toEqual([]);
     await expect(removeSavedPlace({ placeId: 'p-sam' })).resolves.toEqual({ removed: true });
+  });
+});
+
+it('unbookmarks one recommendation while retaining the place, other recommendation and private note', async () => {
+  await savePlace({ placeId: 'p-sam', recommendationId: 'r5' });
+  await savePlace({ placeId: 'p-sam', recommendationId: 'r7' });
+  await updateSavedNote({ placeId: 'p-sam', personalNote: 'My private plan' });
+  const { saved } = await removeSavedRecommendation({ placeId: 'p-sam', recommendationId: 'r5' });
+  expect(saved.place.id).toBe('p-sam');
+  expect(saved.recommendations.map((item) => item.id)).toEqual(['r7']);
+  expect(saved.personalNote).toBe('My private plan');
+  fake.uid = 'bob';
+  await rejectsWith(
+    removeSavedRecommendation({ placeId: 'p-sam', recommendationId: 'r7' }),
+    'not-found',
+  );
+  expect(fake.get('savedPlaces/alice_p-sam')).toMatchObject({
+    recommendationIds: ['r7'],
+    personalNote: 'My private plan',
+  });
+});
+
+describe('restoreSavedPlace', () => {
+  const restore = (over: Partial<Parameters<typeof restoreSavedPlace>[0]> = {}) =>
+    restoreSavedPlace({
+      placeId: 'p-sam',
+      recommendationIds: ['r5', 'r7'],
+      personalNote: 'Try the soup',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      ...over,
+    });
+
+  it('puts a removed place back with its date, note, and recommendations', async () => {
+    const { saved } = await restore();
+    expect(saved.personalNote).toBe('Try the soup');
+    expect(saved.createdAt).toBe('2026-09-01T10:00:00.000Z');
+    expect(saved.recommendations.map((r) => r.id)).toEqual(['r5', 'r7']);
+    expect(fake.get('savedPlaces/alice_p-sam')).toMatchObject({
+      userId: 'alice',
+      placeId: 'p-sam',
+      recommendationIds: ['r5', 'r7'],
+      personalNote: 'Try the soup',
+    });
+  });
+
+  it('drops recommendations that were removed or belong to another place', async () => {
+    const { saved } = await restore({ recommendationIds: ['r5', 'r-removed', 'r-park', 'gone'] });
+    expect(saved.recommendations.map((r) => r.id)).toEqual(['r5']);
+  });
+
+  it('merges with a save made after the removal instead of overwriting it', async () => {
+    await savePlace({ placeId: 'p-sam', recommendationId: 'r7' });
+    await updateSavedNote({ placeId: 'p-sam', personalNote: 'Newer note' });
+    const before = fake.get('savedPlaces/alice_p-sam') as { createdAt: string };
+    const { saved } = await restore();
+    expect(saved.personalNote).toBe('Newer note');
+    expect(saved.createdAt).toBe(before.createdAt);
+    expect(saved.recommendations.map((r) => r.id).sort()).toEqual(['r5', 'r7']);
+  });
+
+  it('falls back to now for an unreadable date, and rejects bad input', async () => {
+    const { saved } = await restore({ createdAt: 'not a date' });
+    expect(Number.isNaN(Date.parse(saved.createdAt))).toBe(false);
+    await rejectsWith(restore({ personalNote: 'x'.repeat(2001) }), 'invalid-argument');
+    await rejectsWith(restore({ recommendationIds: [''] }), 'invalid-argument');
+    await rejectsWith(restore({ placeId: 'nope' }), 'not-found');
+  });
+
+  it("only ever writes the signed-in user's own save", async () => {
+    await restore();
+    expect(fake.all('savedPlaces').map((d) => (d as { userId: string }).userId)).toEqual(['alice']);
   });
 });

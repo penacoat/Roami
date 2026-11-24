@@ -86,6 +86,25 @@ describe('getPlace', () => {
     expect(place.openingHours).toBeNull();
     expect(place.missingFields).toEqual(['openingHours']);
   });
+  it('carries the website hours and checked date through the shared place API', async () => {
+    const source = {
+      url: 'https://www.seattleartmuseum.org/visit/seattle-art-museum',
+      checkedAt: '2026-11-22',
+    };
+    fake.seed('places/p-sourced', {
+      id: 'p-sourced',
+      name: 'Museum',
+      latitude: 47.6,
+      longitude: -122.3,
+      category: 'museum',
+      openingHours: 'Wed 10 am–5 pm',
+      openingHoursSource: source,
+      missingFields: [],
+    });
+    const { place } = await getPlace({ placeId: 'p-sourced' });
+    expect(place.openingHoursSource).toEqual(source);
+    expect(place.openingHours).toBe('Wed 10 am–5 pm');
+  });
   it('labels an author with no profile instead of failing', async () => {
     const { recommendations } = await getPlace({ placeId: 'p-park' });
     expect(recommendations.map((r) => [r.id, r.author?.name])).toEqual([
@@ -117,8 +136,27 @@ describe('getFeed', () => {
     const { items } = await getFeed({ city: 'Seattle', limit: 50 });
     expect(items).toHaveLength(48);
   });
+  it('pages through the feed with nextCursor, without repeats or gaps', async () => {
+    const first = await getFeed({ city: 'Seattle', limit: 2 });
+    expect(first.items.map((r) => r.id)).toEqual(['r2', 'r-park']);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await getFeed({ city: 'Seattle', limit: 2, cursor: first.nextCursor! });
+    expect(second.items.map((r) => r.id)).toEqual(['r1']);
+    expect(second.nextCursor).toBeNull();
+  });
+  it('is not thrown off by a newer postcard arriving between pages', async () => {
+    const first = await getFeed({ city: 'Seattle', limit: 2 });
+    seedRec('r-new', 'p-cafe', '2026-10-09T12:00:00Z');
+    const second = await getFeed({ city: 'Seattle', limit: 2, cursor: first.nextCursor! });
+    expect(second.items.map((r) => r.id)).toEqual(['r1']);
+  });
+  it('has no nextCursor when everything fits on one page', async () => {
+    const { nextCursor } = await getFeed({ city: 'Seattle', limit: 3 });
+    expect(nextCursor).toBeNull();
+  });
   it('rejects a missing city or a bad limit', async () => {
     await rejectsWith(getFeed({ city: '  ' }), 'invalid-argument');
     await rejectsWith(getFeed({ city: 'Seattle', limit: 0 }), 'invalid-argument');
+    await rejectsWith(getFeed({ city: 'Seattle', cursor: 'garbage' }), 'invalid-argument');
   });
 });

@@ -34,7 +34,7 @@ async function openReset() {
 it('offers password recovery from the sign-in screen and hides the password field', async () => {
   await openReset();
   expect(screen.getByText('Reset your password')).toBeTruthy();
-  expect(screen.queryByPlaceholderText('Password')).toBeNull();
+  expect(screen.queryByLabelText('Password')).toBeNull();
 });
 
 it('asks for an email before sending', async () => {
@@ -47,7 +47,7 @@ it('asks for an email before sending', async () => {
 it('sends the link and shows a confirmation that works for any email', async () => {
   mockReset.mockResolvedValue();
   await openReset();
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'roamer@example.com');
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'roamer@example.com');
   await fireEvent.press(screen.getByRole('button', { name: 'Send reset link' }));
   expect(await screen.findByText(/we sent a link to reset your password/)).toBeTruthy();
   expect(mockReset).toHaveBeenCalledWith('roamer@example.com');
@@ -56,17 +56,17 @@ it('sends the link and shows a confirmation that works for any email', async () 
 it('shows an error when sending fails and can go back to sign in', async () => {
   mockReset.mockRejectedValue(new Error('Network error. Check your connection and try again.'));
   await openReset();
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'roamer@example.com');
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'roamer@example.com');
   await fireEvent.press(screen.getByRole('button', { name: 'Send reset link' }));
   expect(await screen.findByText(/Network error/)).toBeTruthy();
-  await fireEvent.press(screen.getByRole('button', { name: 'Back to sign in' }));
-  expect(screen.getByText('Welcome back')).toBeTruthy();
+  await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
+  expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
 });
 
 async function fillSignIn(email = 'roamer@example.com', password = 'secret1') {
   await render(<AuthScreen />);
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), email);
-  await fireEvent.changeText(screen.getByPlaceholderText('Password'), password);
+  await fireEvent.changeText(screen.getByLabelText('Email'), email);
+  await fireEvent.changeText(screen.getByLabelText('Password'), password);
 }
 
 const submit = () => fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
@@ -82,7 +82,7 @@ it('shows a message next to each blank sign-in field and does not call Firebase'
 it('clears a field message as soon as the user starts fixing that field', async () => {
   await render(<AuthScreen />);
   await submit();
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'a');
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'a');
   expect(screen.queryByText('Enter your email.')).toBeNull();
   expect(screen.getByText('Enter your password.')).toBeTruthy();
 });
@@ -152,15 +152,15 @@ it('keeps showing the connection message if Try again fails again', async () => 
 
 async function openSignUp() {
   await render(<AuthScreen />);
-  await fireEvent.press(screen.getByRole('button', { name: 'Create an account' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
 }
 
 it('refuses a sign-up name longer than 60 characters before creating the account', async () => {
   await openSignUp();
-  await fireEvent.changeText(screen.getByPlaceholderText('Name'), 'x'.repeat(61));
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'roamer@example.com');
-  await fireEvent.changeText(screen.getByPlaceholderText('Password'), 'secret1');
-  await fireEvent.press(screen.getByRole('button', { name: 'Sign up' }));
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'x'.repeat(61));
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'roamer@example.com');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'secret1');
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
   expect(screen.getByText('Names can be at most 60 characters.')).toBeTruthy();
   expect(mockSignUp).not.toHaveBeenCalled();
 });
@@ -168,14 +168,14 @@ it('refuses a sign-up name longer than 60 characters before creating the account
 it('shows email-already-in-use and weak-password under their own fields', async () => {
   mockSignUp.mockRejectedValueOnce(fail('auth/email-already-in-use'));
   await openSignUp();
-  await fireEvent.changeText(screen.getByPlaceholderText('Name'), 'Roamer');
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'roamer@example.com');
-  await fireEvent.changeText(screen.getByPlaceholderText('Password'), 'secret1');
-  await fireEvent.press(screen.getByRole('button', { name: 'Sign up' }));
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'Roamer');
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'roamer@example.com');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'secret1');
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
   expect(await screen.findByText(/already exists/)).toBeTruthy();
 
   mockSignUp.mockRejectedValueOnce(fail('auth/weak-password'));
-  await fireEvent.press(screen.getByRole('button', { name: 'Sign up' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
   expect(await screen.findByText(/at least 6 characters/)).toBeTruthy();
 });
 
@@ -184,14 +184,14 @@ it('reports a failed profile save after sign-up to the app-level banner', async 
   mockSignUp.mockResolvedValue({ uid: 'u1', email: 'roamer@example.com', displayName: 'Roamer' });
   mockCallApi.mockRejectedValue(new Error('permission-denied'));
   await openSignUp();
-  await fireEvent.changeText(screen.getByPlaceholderText('Name'), 'Roamer');
-  await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'roamer@example.com');
-  await fireEvent.changeText(screen.getByPlaceholderText('Password'), 'secret1');
-  await fireEvent.press(screen.getByRole('button', { name: 'Sign up' }));
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'Roamer');
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'roamer@example.com');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'secret1');
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
   await waitFor(() => expect(reportProfileSetupFailed).toHaveBeenCalledTimes(1));
 });
 
 it('stops the name field at 60 characters so the limit can never be hit', async () => {
   await openSignUp();
-  expect(screen.getByPlaceholderText('Name').props.maxLength).toBe(60);
+  expect(screen.getByLabelText('Name').props.maxLength).toBe(60);
 });

@@ -18,8 +18,10 @@ import type {
   TripView,
 } from '@roami/shared';
 
+import { searchCities } from '../cities/citySearch';
 import { ME, OTHER_USERS, PLACES, RECOMMENDATIONS } from './fixtureData';
 import { ApiError, type ApiHandlers } from './types';
+import { pageAfter } from '../logic/feedPaging';
 import { journalView, validateRanking } from '../logic/journal';
 import { planPreparation, taskWithReview } from '../logic/preparation';
 import { planStopDetails } from '../logic/stopDetails';
@@ -224,6 +226,8 @@ const discoveryHandlers: Pick<
   | 'listSavedPlaces'
   | 'updateSavedNote'
   | 'removeSavedPlace'
+  | 'removeSavedRecommendation'
+  | 'restoreSavedPlace'
 > = {
   async ensureProfile(request) {
     await delay();
@@ -290,13 +294,14 @@ const discoveryHandlers: Pick<
   async getFeed(request) {
     await delay();
     const followedIds = new Set([...follows].map((pair) => pair.split(':')[1]));
-    const items = [...allRecs()]
-      .filter(
-        (item) => !request.followingOnly || (!!item.author && followedIds.has(item.author.id)),
-      )
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, request.limit ?? 20);
-    return clone({ items });
+    const city = request.city.trim().toLowerCase();
+    const filtered = allRecs().filter(
+      (item) =>
+        item.place.city?.trim().toLowerCase() === city &&
+        (!request.followingOnly || (!!item.author && followedIds.has(item.author.id))),
+    );
+    const { page, nextCursor } = pageAfter(filtered, request.cursor, request.limit ?? 20);
+    return clone({ items: page, nextCursor });
   },
 
   async getFollowing() {
@@ -375,10 +380,33 @@ const discoveryHandlers: Pick<
     return clone({ saved: savedView(record) });
   },
 
+  async removeSavedRecommendation(request) {
+    await delay();
+    const record = saved.get(request.placeId);
+    if (!record) throw new ApiError('not-found', 'That place is not saved.');
+    record.recommendationIds = record.recommendationIds.filter(
+      (id) => id !== request.recommendationId,
+    );
+    return clone({ saved: savedView(record) });
+  },
   async removeSavedPlace(request) {
     await delay();
     saved.delete(request.placeId);
     return { removed: true };
+  },
+
+  async restoreSavedPlace(request) {
+    await delay();
+    const current = saved.get(request.placeId);
+    const known = new Set(allRecs().map((r) => r.id));
+    const ids = request.recommendationIds.filter((id) => known.has(id));
+    saved.set(request.placeId, {
+      placeId: request.placeId,
+      recommendationIds: [...new Set([...(current?.recommendationIds ?? []), ...ids])],
+      personalNote: current?.personalNote || request.personalNote,
+      createdAt: current?.createdAt ?? request.createdAt,
+    });
+    return clone({ saved: savedView(saved.get(request.placeId)!) });
   },
 };
 
@@ -386,6 +414,7 @@ const tripHandlers: Pick<
   ApiHandlers,
   | 'createTrip'
   | 'listTrips'
+  | 'setTripArchived'
   | 'getTrip'
   | 'deleteTrip'
   | 'addCandidate'
@@ -432,6 +461,7 @@ const tripHandlers: Pick<
         (id) => !r.stops.some((stop) => stop.placeId === id),
       ).length,
       stopCount: r.stops.length,
+      ...(r.trip.archivedAt && { archivedAt: r.trip.archivedAt }),
       ...(request.includeScheduledPlaces && {
         scheduledPlaces: r.stops.flatMap(({ placeId, day }) => (placeId ? [{ placeId, day }] : [])),
       }),
@@ -441,6 +471,20 @@ const tripHandlers: Pick<
         (a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id),
       ),
     });
+  },
+
+  async setTripArchived(request) {
+    await delay();
+    const record = getTripRecord(request.tripId);
+    if (Boolean(record.trip.archivedAt) !== request.archived) {
+      record.trip = {
+        ...record.trip,
+        archivedAt: request.archived ? nowIso() : null,
+        revision: record.trip.revision + 1,
+        updatedAt: nowIso(),
+      };
+    }
+    return clone({ trip: tripView(record) });
   },
 
   async getTrip(request) {
@@ -462,11 +506,25 @@ const tripHandlers: Pick<
     await delay();
     const record = getTripRecord(request.tripId);
     getPlace(request.placeId);
-    if (!record.trip.candidatePlaceIds.includes(request.placeId)) {
-      if (record.trip.candidatePlaceIds.length >= MAX_CANDIDATES) {
+    const previous = record.trip.candidateRecommendationIds?.[request.placeId] ?? [];
+    const recommendationIds = [...new Set([...previous, ...(request.recommendationIds ?? [])])];
+    unwrap(validateStopDetails({ visitMinutes: 60, recommendationIds }));
+    const exists = record.trip.candidatePlaceIds.includes(request.placeId);
+    if (!exists || recommendationIds.length !== previous.length) {
+      if (!exists && record.trip.candidatePlaceIds.length >= MAX_CANDIDATES) {
         throw new ApiError('invalid-argument', `A trip can have at most ${MAX_CANDIDATES} places.`);
       }
-      commit(record, { candidatePlaceIds: [...record.trip.candidatePlaceIds, request.placeId] });
+      commit(record, {
+        candidatePlaceIds: exists
+          ? record.trip.candidatePlaceIds
+          : [...record.trip.candidatePlaceIds, request.placeId],
+        ...(recommendationIds.length > 0 && {
+          candidateRecommendationIds: {
+            ...record.trip.candidateRecommendationIds,
+            [request.placeId]: recommendationIds,
+          },
+        }),
+      });
     }
     return clone({ trip: tripView(record) });
   },
@@ -477,6 +535,13 @@ const tripHandlers: Pick<
     if (record.trip.candidatePlaceIds.includes(request.placeId)) {
       commit(record, {
         candidatePlaceIds: record.trip.candidatePlaceIds.filter((id) => id !== request.placeId),
+        ...(record.trip.candidateRecommendationIds && {
+          candidateRecommendationIds: Object.fromEntries(
+            Object.entries(record.trip.candidateRecommendationIds).filter(
+              ([id]) => id !== request.placeId,
+            ),
+          ),
+        }),
       });
     }
     return clone({ trip: tripView(record) });
@@ -502,7 +567,12 @@ const tripHandlers: Pick<
       tripId: record.trip.id,
       placeId: request.placeId,
       title: null,
-      recommendationIds: [...new Set(request.recommendationIds ?? [])],
+      recommendationIds: [
+        ...new Set([
+          ...(record.trip.candidateRecommendationIds?.[request.placeId] ?? []),
+          ...(request.recommendationIds ?? []),
+        ]),
+      ],
       startTime,
       visitMinutes: request.visitMinutes,
       walkingMinutesFromPrevious: null,
@@ -511,6 +581,7 @@ const tripHandlers: Pick<
       warnings: [],
     };
     unwrap(validateActivityOverlap(record.stops, stop));
+    unwrap(validateStopDetails(stop));
     saveStops(record, [stop, ...applyPositions(record.stops, moved)]);
     return clone({ trip: tripView(record) });
   },
@@ -677,6 +748,8 @@ const personalHandlers: Pick<
 };
 
 export const fixtureHandlers: ApiHandlers = {
+  // City geography stays real in preview; sample places remain separate.
+  searchCities,
   ...discoveryHandlers,
   ...tripHandlers,
   ...personalHandlers,

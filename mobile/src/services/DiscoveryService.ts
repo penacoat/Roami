@@ -1,6 +1,7 @@
 import type { GetFeedRequest, GetFeedResponse, PlaceSummary } from '@roami/shared';
 
 import { ApiError } from '../api';
+import { decodeCursor, pageAfter } from '../logic/feedPaging';
 import { relationIdOf } from '../logic/osmPlaces';
 import { getCurrentUserId } from '../auth/AuthService';
 import { listFolloweeIds } from '../repositories/FollowRepository';
@@ -15,7 +16,8 @@ const DEFAULT_FEED_LIMIT = 20;
 const MAX_FEED_LIMIT = 50;
 
 /**
- * The newest active recommendations for places in a city.
+ * The newest active recommendations for places in a city, a page at a time.
+ * Pass the `nextCursor` of one page as the `cursor` of the next.
  *
  * Recommendations don't store a city, so this reads the city's places, then the
  * active recommendations for those places, and sorts them in the app. That needs
@@ -41,6 +43,10 @@ export async function getFeed(request: GetFeedRequest): Promise<GetFeedResponse>
   if (request.followingOnly && !followingUserId) {
     throw new ApiError('unauthenticated', 'Sign in to view your following feed.');
   }
+  const cursor = request.cursor ?? null;
+  if (cursor !== null && (typeof cursor !== 'string' || !isValidCursor(cursor))) {
+    throw new ApiError('invalid-argument', 'That page of postcards is no longer valid. Refresh.');
+  }
 
   const cityPlaces = await listCityPlaces(city, cityId);
   if (cityPlaces.length === 0) return { items: [] };
@@ -54,9 +60,11 @@ export async function getFeed(request: GetFeedRequest): Promise<GetFeedResponse>
     recommendations = await listActiveForPlaces([...places.keys()]);
   }
   const inCity = recommendations.filter((recommendation) => places.has(recommendation.placeId));
-  // Pick the newest first, so author names are read only for what's shown.
-  const newest = inCity
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
-    .slice(0, limit);
-  return { items: await toRecommendationViews(newest, places) };
+  const { page, nextCursor } = pageAfter(inCity, cursor, limit);
+  if (page.length === 0) return { items: [] };
+  return { items: await toRecommendationViews(page, places), nextCursor };
+}
+
+function isValidCursor(cursor: string): boolean {
+  return decodeCursor(cursor) !== null;
 }

@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { randomUUID } from "crypto";
 import { resolve } from "path";
 import {
   assertFails,
@@ -13,6 +14,7 @@ import {
 import {
   connectAuthEmulator,
   createUserWithEmailAndPassword,
+  deleteUser,
   initializeAuth,
   inMemoryPersistence,
   signOut,
@@ -69,7 +71,7 @@ beforeAll(async () => {
   connectFirestoreEmulator(mobileDb, "127.0.0.1", 8080);
   const credential = await createUserWithEmailAndPassword(
     mobileAuth,
-    "recommendation-test@example.com",
+    `recommendation-${randomUUID()}@example.com`,
     "integration-test-password",
   );
   userId = credential.user.uid;
@@ -78,6 +80,7 @@ beforeAll(async () => {
 afterAll(async () => {
   recommendationIntegrationContext.db = null;
   recommendationIntegrationContext.userId = null;
+  if (mobileAuth.currentUser) await deleteUser(mobileAuth.currentUser);
   await signOut(mobileAuth);
   await deleteApp(mobileApp);
   await env.cleanup();

@@ -1,4 +1,5 @@
 import { registerLiveHandlers } from '../api';
+import { searchCities } from '../cities/citySearch';
 
 import { getPlaceJournal, markVisited, saveRanking } from './JournalService';
 import { listPreparation, savePreparation, removePreparation } from './PreparationService';
@@ -16,7 +17,14 @@ import {
   updateStopTime,
   updateStopDetails,
 } from './RevisionService';
-import { listSavedPlaces, removeSavedPlace, savePlace, updateSavedNote } from './SaveService';
+import {
+  removeSavedRecommendation,
+  listSavedPlaces,
+  removeSavedPlace,
+  restoreSavedPlace,
+  savePlace,
+  updateSavedNote,
+} from './SaveService';
 import { searchRecommendations } from './SearchService';
 import {
   addCandidate,
@@ -25,6 +33,7 @@ import {
   getTrip,
   listTrips,
   removeCandidate,
+  setTripArchived,
 } from './TripService';
 
 /**
@@ -34,6 +43,7 @@ import {
  */
 export function registerServices(): void {
   registerLiveHandlers({
+    searchCities,
     resolveCity,
     listPlaces,
     ensureProfile,
@@ -50,8 +60,11 @@ export function registerServices(): void {
     listSavedPlaces,
     updateSavedNote,
     removeSavedPlace,
+    removeSavedRecommendation,
+    restoreSavedPlace,
     createTrip,
     listTrips,
+    setTripArchived,
     getTrip,
     deleteTrip,
     addCandidate,

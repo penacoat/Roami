@@ -16,6 +16,9 @@ const mode: ApiMode =
   !isFrontendPreview && process.env.EXPO_PUBLIC_API_MODE === 'live' ? 'live' : 'fixtures';
 const live: Partial<ApiHandlers> = {};
 const warned = new Set<string>();
+export const READ_TIMEOUT_MS = 8000;
+// Two import stages, each with a bounded primary/fallback Overpass request.
+export const CITY_IMPORT_TIMEOUT_MS = 450_000;
 
 export function getApiMode(): ApiMode {
   return mode;
@@ -57,6 +60,7 @@ function toApiError(error: unknown): ApiError {
 export async function callApi<K extends ApiFunctionName>(
   name: K,
   request: ApiRequest<K>,
+  options?: { timeoutMs?: number },
 ): Promise<ApiResponse<K>> {
   type Handler = (req: ApiRequest<K>) => Promise<ApiResponse<K>>;
   const liveHandler = mode === 'live' ? (live[name] as unknown as Handler | undefined) : undefined;
@@ -66,9 +70,24 @@ export async function callApi<K extends ApiFunctionName>(
     console.warn(`[api] No live handler for "${name}" yet, using fixtures.`);
   }
   const handler = liveHandler ?? (fixtureHandlers[name] as unknown as Handler);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await handler(request);
+    const result = handler(request);
+    // A stalled read must release pull-to-refresh. Never time out a write:
+    // it could still commit, making a retry duplicate the user's action.
+    if (!/^(get|list|search)/.test(name)) return await result;
+    return await Promise.race([
+      result,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new ApiError('unavailable', 'The request took too long. Try again.')),
+          options?.timeoutMs ?? READ_TIMEOUT_MS,
+        );
+      }),
+    ]);
   } catch (error) {
     throw toApiError(error);
+  } finally {
+    clearTimeout(timeout);
   }
 }
