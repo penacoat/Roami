@@ -21,6 +21,7 @@ import { PlacePhotos } from './PlacePhotos';
 import { PlacePostcards, isWebLink } from './PlacePostcards';
 import { hasCoordinates } from './mapUtils';
 import { placeActionStyles } from '../../components/placeActionStyles';
+import { WritePostcard } from '../../components/recommendations/WritePostcard';
 
 interface Props {
   place: PlaceSummary;
@@ -245,6 +246,11 @@ export function PlaceDetails({
           }}
           onSave={onSave}
           onRemove={onRemoveRecommendation}
+        />
+        <WritePostcard
+          placeId={place.id}
+          placeName={place.name}
+          onSent={() => setRetry((value) => value + 1)}
         />
         {place.id.startsWith('osm-') && (
           <Text style={styles.hours}>© OpenStreetMap contributors</Text>
