@@ -2,6 +2,8 @@
 
 Roami is an iOS mobile app built with React Native and Expo for social travel discovery and planning, aimed at university students exploring an unfamiliar city. Users can search for places, explore recommendations on a map, save places, and plan trips. Seattle is the seeded demo city; trusted catalog editors can trigger imports of other cities from OpenStreetMap in Explore.
 
+**Want to try the app on an iPhone?** See [Trying Roami](docs/trying-roami.md) for install and sign-in instructions. To check that saves, trips, and notes persist, see the [persistence test plan](docs/persistence-test-plan.md).
+
 **Contents:** [Operational use cases](#operational-use-cases) · [Prerequisites](#prerequisites) · [Build](#build) · [Test](#test) · [Run](#run) · [Quick start](#quick-start) · [Troubleshooting](#troubleshooting) · [Architecture](#architecture) · [Repository layout](#repository-layout) · [Version control/bug tracking/CI](#version-control-bug-tracking-and-ci) · [Team](#team)
 
 ## Operational use cases
